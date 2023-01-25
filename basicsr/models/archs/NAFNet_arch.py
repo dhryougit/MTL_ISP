@@ -144,6 +144,7 @@ class NAFBlock(nn.Module):
         super().__init__()
         dw_channel = c * DW_Expand
         ratio = 0.5
+        self.ratio = ratio
         c_split = int(c*ratio)
         dw_split = int(dw_channel*ratio)
         self.conv1 = nn.Conv2d(in_channels=c, out_channels=dw_channel, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
@@ -203,7 +204,7 @@ class NAFBlock(nn.Module):
         x = self.norm1(x)
         x = self.conv1(x)
         # x = self.conv2(x)
-        x_size = int(x.size(1)*ratio)
+        x_size = int(x.size(1)*self.ratio)
         x_l = x[:,:x_size]
         x_g = x[:,x_size:]
 
@@ -234,7 +235,7 @@ class NAFBlock(nn.Module):
 
         # x = self.conv4(self.norm2(y))
         x = self.norm2(y)
-        x_size = int(x.size(1)*ratio)
+        x_size = int(x.size(1)*self.ratio)
 
         x_l = x[:,:x_size]
         x_g = x[:,x_size:]
@@ -367,15 +368,15 @@ if __name__ == '__main__':
     # middle_blk_num = 1
     # dec_blks = [1, 1, 1, 1]
 
-    # width = 32
-    # enc_blks =  [2, 2, 4, 8]
-    # middle_blk_num =  12
-    # dec_blks =  [2, 2, 2, 2]
+    width = 32
+    enc_blks =  [2, 2, 4, 8]
+    middle_blk_num =  12
+    dec_blks =  [2, 2, 2, 2]
 
-    width = 64
-    enc_blks = [2, 2, 4, 8]
-    middle_blk_num = 12
-    dec_blks = [2, 2, 2, 2]
+    # width = 64
+    # enc_blks = [2, 2, 4, 8]
+    # middle_blk_num = 12
+    # dec_blks = [2, 2, 2, 2]
     
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                       enc_blk_nums=enc_blks, dec_blk_nums=dec_blks).cuda()
