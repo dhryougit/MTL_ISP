@@ -199,12 +199,8 @@ class NAFBlock(nn.Module):
 
     def forward(self, inp):
         x = inp
-        ratio = 0.5
-        
-
-
+   
         x = self.norm1(x)
-
         x = self.conv1(x)
         # x = self.conv2(x)
         x_size = int(x.size(1)*ratio)
@@ -222,7 +218,6 @@ class NAFBlock(nn.Module):
 
         out_xg_2 = self.conv_g2g(x_g)
 
-
         out_xl = out_xl_1 + out_xl_2
         out_xg = out_xg_1 + out_xg_2
 
@@ -236,8 +231,6 @@ class NAFBlock(nn.Module):
         x = self.dropout1(x)
 
         y = inp + x * self.beta
-
-
 
         # x = self.conv4(self.norm2(y))
         x = self.norm2(y)
