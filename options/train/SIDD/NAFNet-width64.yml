@@ -8,15 +8,15 @@
 name: NAFNet-SIDD-width64
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 8
+num_gpu: 4
 manual_seed: 10
 
 datasets:
   train:
     name: SIDD
     type: PairedImageDataset
-    dataroot_gt: ./datasets/SIDD/train/gt_crops.lmdb
-    dataroot_lq: ./datasets/SIDD/train/input_crops.lmdb
+    dataroot_gt: /data/sidd/train/gt_crops.lmdb
+    dataroot_lq: /data/sidd/train/input_crops.lmdb
 
     filename_tmpl: '{}'
     io_backend:
@@ -29,15 +29,15 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 8
+    batch_size_per_gpu: 3
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
     name: SIDD_val
     type: PairedImageDataset
-    dataroot_gt: ./datasets/SIDD/val/gt_crops.lmdb
-    dataroot_lq: ./datasets/SIDD/val/input_crops.lmdb
+    dataroot_gt: /data/sidd/SIDD/val/gt_crops.lmdb
+    dataroot_lq: /data/sidd/SIDD/val/input_crops.lmdb
     io_backend:
       type: lmdb
 
@@ -99,7 +99,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    project: ~
+    project: test-project
     resume_id: ~
 
 # dist training settings

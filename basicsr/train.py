@@ -24,6 +24,8 @@ from basicsr.utils import (MessageLogger, check_resume, get_env_info,
 from basicsr.utils.dist_util import get_dist_info, init_dist
 from basicsr.utils.options import dict2str, parse
 
+import wandb
+
 
 def parse_options(is_train=True):
     parser = argparse.ArgumentParser()
@@ -40,6 +42,7 @@ def parse_options(is_train=True):
     parser.add_argument('--output_path', type=str, required=False, help='The path to the output image. For single image inference only.')
 
     args = parser.parse_args()
+    # wandb.config.update(args)
     opt = parse(args.opt, is_train=is_train)
 
     # distributed settings
@@ -201,6 +204,8 @@ def main():
         model = create_model(opt)
         start_epoch = 0
         current_iter = 0
+
+   
 
     # create message logger (formatted outputs)
     msg_logger = MessageLogger(opt, current_iter, tb_logger)

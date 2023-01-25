@@ -10,6 +10,10 @@ import time
 
 from .dist_util import get_dist_info, master_only
 
+from sys import stdout
+
+import wandb
+
 
 class MessageLogger():
     """Message logger for printing.
@@ -81,8 +85,10 @@ class MessageLogger():
 
                 if k.startswith('l_'):
                     self.tb_logger.add_scalar(f'losses/{k}', v, normed_step)
+                    wandb.log({f'losses/{k}': v})
                 elif k.startswith('m_'):
                     self.tb_logger.add_scalar(f'metrics/{k}', v, normed_step)
+                    wandb.log({f'metrics/{k}': v})
                 else:
                     assert 1 == 0
                 # else:
@@ -121,9 +127,15 @@ def init_wandb_logger(opt):
         project=project,
         sync_tensorboard=True)
 
+    wandb.config.update(opt)
+
     logger.info(f'Use wandb logger with id={wandb_id}; project={project}.')
 
 
+
+
+
+# @master_only
 def get_root_logger(logger_name='basicsr',
                     log_level=logging.INFO,
                     log_file=None):
@@ -145,20 +157,42 @@ def get_root_logger(logger_name='basicsr',
         logging.Logger: The root logger.
     """
     logger = logging.getLogger(logger_name)
-    # if the logger has been initialized, just return it
-    if logger.hasHandlers():
-        return logger
+  
+    # if logger.hasHandlers():
+    #     return logger
+    # logging.basicConfig(level=log_level)
+    
 
-    format_str = '%(asctime)s %(levelname)s: %(message)s'
-    logging.basicConfig(format=format_str, level=log_level)
+    logger.setLevel(logging.DEBUG) # set logger level
+
     rank, _ = get_dist_info()
     if rank != 0:
         logger.setLevel('ERROR')
-    elif log_file is not None:
-        file_handler = logging.FileHandler(log_file, 'w')
-        file_handler.setFormatter(logging.Formatter(format_str))
-        file_handler.setLevel(log_level)
-        logger.addHandler(file_handler)
+    else:
+        logFormatter = logging.Formatter\
+        ("%(name)-12s %(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
+        consoleHandler = logging.StreamHandler(stdout) #set streamhandler to stdout
+        consoleHandler.setFormatter(logFormatter)
+        logger.addHandler(consoleHandler)
+
+
+    # # if the logger has been initialized, just return it
+    # if logger.hasHandlers():
+    #     return logger
+
+    # format_str = '%(asctime)s %(levelname)s: %(message)s'
+
+
+    # logging.basicConfig(format=format_str, level=log_level)
+    # rank, _ = get_dist_info()
+    # if rank != 0:
+    #     logger.setLevel('ERROR')
+    # elif log_file is not None:
+    #     file_handler = logging.FileHandler(log_file, 'w')
+    #     file_handler.setFormatter(logging.Formatter(format_str))
+    #     file_handler.setLevel(log_level)
+    #     logger.addHandler(file_handler)
+
 
     return logger
 

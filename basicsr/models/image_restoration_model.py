@@ -17,6 +17,9 @@ from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.dist_util import get_dist_info
 
+import wandb
+import sys
+
 loss_module = importlib.import_module('basicsr.models.losses')
 metric_module = importlib.import_module('basicsr.metrics')
 
@@ -390,8 +393,10 @@ class ImageRestorationModel(BaseModel):
         log_str = f'Validation {dataset_name}, \t'
         for metric, value in metric_dict.items():
             log_str += f'\t # {metric}: {value:.4f}'
+            
         logger = get_root_logger()
         logger.info(log_str)
+        
 
         log_dict = OrderedDict()
         # for name, value in loss_dict.items():
@@ -411,3 +416,28 @@ class ImageRestorationModel(BaseModel):
     def save(self, epoch, current_iter):
         self.save_network(self.net_g, 'net_g', current_iter)
         self.save_training_state(epoch, current_iter)
+
+
+    def print_values(self):
+        print(self.net_g)
+
+
+        # f = open("fftvalue.txt", 'w')
+        # f = open("orivalue.txt", 'w')
+        
+        for k, v in self.net_g.named_parameters():
+            if 'conv' in k and 'weight' in k:
+
+                # print(k, torch.std_mean(v))
+                
+                # sys.stdout = open('fftvalue.txt', 'w')
+                # print(k, v.size())
+                # print(k, torch.fft.fftn(v, dim=(-1,-2)))
+                # f.write(str(k) + str(torch.fft.fftn(v, dim=(-1,-2))) + "\n")
+                f.write(str(k) + str(v) + "\n")
+                
+                # sys.stdout.close()
+        # f.close()
+
+     
+

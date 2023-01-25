@@ -21,15 +21,15 @@ def main():
     opt['n_thread'] = 20
     opt['compression_level'] = 3
 
-    opt['input_folder'] = './datasets/SIDD/Data'
-    opt['save_folder'] = './datasets/SIDD/train/input_crops'
+    opt['input_folder'] = '/data/sidd/data'
+    opt['save_folder'] = '/data/sidd/train/input_crops'
     opt['crop_size'] = 512
     opt['step'] = 384
     opt['thresh_size'] = 0
     opt['keywords'] = '_NOISY'
     extract_subimages(opt)
 
-    opt['save_folder'] = './datasets/SIDD/train/gt_crops'
+    opt['save_folder'] = '/data/sidd/train/gt_crops'
     opt['keywords'] = '_GT'
     extract_subimages(opt)
 

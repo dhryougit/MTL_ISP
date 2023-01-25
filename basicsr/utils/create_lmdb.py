@@ -88,14 +88,14 @@ def create_lmdb_for_rain13k():
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
 def create_lmdb_for_SIDD():
-    folder_path = './datasets/SIDD/train/input_crops'
-    lmdb_path = './datasets/SIDD/train/input_crops.lmdb'
+    folder_path = '/data/sidd/train/input_crops'
+    lmdb_path = '/data/sidd/train/input_crops.lmdb'
 
     img_path_list, keys = prepare_keys(folder_path, 'PNG')
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
-    folder_path = './datasets/SIDD/train/gt_crops'
-    lmdb_path = './datasets/SIDD/train/gt_crops.lmdb'
+    folder_path = '/data/sidd/train/gt_crops'
+    lmdb_path = '/data/sidd/train/gt_crops.lmdb'
 
     img_path_list, keys = prepare_keys(folder_path, 'PNG')
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)

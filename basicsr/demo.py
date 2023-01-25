@@ -39,7 +39,10 @@ def main():
 
     ## 2. run inference
     opt['dist'] = False
+    # print(opt)
     model = create_model(opt)
+
+    model.print_values()
 
     model.feed_data(data={'lq': img.unsqueeze(dim=0)})
 
