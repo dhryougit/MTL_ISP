@@ -180,6 +180,7 @@ class NAFNet(nn.Module):
                 )
             )
 
+
         self.padder_size = 2 ** len(self.encoders)
 
     def forward(self, inp):
