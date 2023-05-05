@@ -193,6 +193,9 @@ if __name__ == '__main__':
     inp_shape = (3, 256, 256)
 
     from ptflops import get_model_complexity_info
+    from torchsummary import summary as summary_
+
+    summary_(net.cuda(),(3, 256, 256),batch_size=10)
 
     macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
 

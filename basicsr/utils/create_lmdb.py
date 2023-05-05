@@ -50,14 +50,14 @@ def create_lmdb_for_reds():
 
 
 def create_lmdb_for_gopro():
-    folder_path = './datasets/GoPro/train/blur_crops'
-    lmdb_path = './datasets/GoPro/train/blur_crops.lmdb'
+    folder_path = '/data/GoPro/train/blur_crops'
+    lmdb_path = '/data/GoPro/train/blur_crops.lmdb'
 
     img_path_list, keys = prepare_keys(folder_path, 'png')
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
-    folder_path = './datasets/GoPro/train/sharp_crops'
-    lmdb_path = './datasets/GoPro/train/sharp_crops.lmdb'
+    folder_path = '/data/GoPro/train/sharp_crops'
+    lmdb_path = '/data/GoPro/train/sharp_crops.lmdb'
 
     img_path_list, keys = prepare_keys(folder_path, 'png')
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)

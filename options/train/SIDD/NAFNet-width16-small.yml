@@ -5,11 +5,10 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: tmp
-# name: xxx
+name: test-everyiter-NAFNet16-small
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 4
+num_gpu: 2
 manual_seed: 10
 
 datasets:
@@ -29,8 +28,8 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 8
-    batch_size_per_gpu: 2
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 32
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -45,28 +44,28 @@ datasets:
 
 network_g:
   type: NAFNet
-  width: 64
-  enc_blk_nums: [2, 2, 4, 8]
-  middle_blk_num: 12
+  width: 16
+  enc_blk_nums: [2, 2, 2, 2]
+  middle_blk_num: 2
   dec_blk_nums: [2, 2, 2, 2]
 
 # path
 path:
-  pretrain_network_g: ./finetuned_models/NAFNet-SIDD-width64.pth
-  advtrained_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
-  # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
-  # pretrain_network_g: ./finetuned_models/NAFNet-weight64-advtrained.pth
-  # pretrain_network_g: ./finetuned_models/adv-training.pth
-  # pretrain_network_g: ./finetuned_models/adv-training.pth
-  # pretrain_network_g: ./finetuned_models/net_g_300000.pth
-  # pretrain_network_g: ./experiments/NAFNet-width64-zero_pr0.5_taylorpruned_hfs_cutoff0.5/models/zero_net_g_latest.pth
-  # strict_load_g: true
-  strict_load_g: False
+  pretrain_network_g: ~
+  # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-SIDD-width16-15-train-0-55-filter/models/net_g_3000.pth
+  # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-SIDD-width16-5-to-25-filter/models/net_g_60000.pth
+  strict_load_g: true
   resume_state: ~
 
 # training settings
 train:
   optim_g:
+    type: AdamW
+    lr: !!float 1e-3
+    weight_decay: 0.
+    betas: [0.9, 0.9]
+
+  optim_g2:
     type: AdamW
     lr: !!float 1e-4
     weight_decay: 0.
@@ -74,11 +73,11 @@ train:
 
   scheduler:
     type: TrueCosineAnnealingLR
-    T_max: 400000
+    T_max: 200000
     eta_min: !!float 1e-7
 
-  total_iter: 400000
-  warmup_iter: -1 # no warm up
+  total_iter: 200000
+  warmup_iter: -1 # no warm ups
 
   # losses
   pixel_opt:
@@ -88,7 +87,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 2e3
+  val_freq: 2000
   save_img: false
   use_image: false
 
@@ -105,10 +104,11 @@ val:
 # logging settings
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 5e3
-  use_tb_logger: true
+  save_checkpoint_freq: 5000
+  use_tb_logger: false
   wandb:
-    project: tmp
+    # project: test-project
+    project: test
     resume_id: ~
 
 # dist training settings

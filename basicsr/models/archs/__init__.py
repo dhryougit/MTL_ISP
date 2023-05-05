@@ -36,8 +36,9 @@ def dynamic_instantiation(modules, cls_type, opt):
     Returns:
         class: Instantiated class.
     """
-
+    
     for module in modules:
+        print(module)
         cls_ = getattr(module, cls_type, None)
         if cls_ is not None:
             break

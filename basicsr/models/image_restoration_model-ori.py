@@ -11,26 +11,17 @@ from collections import OrderedDict
 from copy import deepcopy
 from os import path as osp
 from tqdm import tqdm
-import time
+
 from basicsr.models.archs import define_network
 from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.dist_util import get_dist_info
-
-import matplotlib.pyplot as plt
 
 import wandb
 import sys
 
 loss_module = importlib.import_module('basicsr.models.losses')
 metric_module = importlib.import_module('basicsr.metrics')
-
-def forward_hook(module, input, output):
-    module.feature_map = output
-
-
-
-
 
 class ImageRestorationModel(BaseModel):
     """Base Deblur model for single image deblur."""
@@ -41,18 +32,9 @@ class ImageRestorationModel(BaseModel):
         # define network
         self.net_g = define_network(deepcopy(opt['network_g']))
         self.net_g = self.model_to_device(self.net_g)
-        self.prune_rate = 0
-        self.test_mode = 'ori'
 
-        self.maxvalue = []
-   
-
-
-      
         # load pretrained models
         load_path = self.opt['path'].get('pretrain_network_g', None)
-        
-
         if load_path is not None:
             self.load_network(self.net_g, load_path,
                               self.opt['path'].get('strict_load_g', True), param_key=self.opt['path'].get('param_key', 'params'))
@@ -61,18 +43,6 @@ class ImageRestorationModel(BaseModel):
             self.init_training_settings()
 
         self.scale = int(opt['scale'])
-
-        for name, module in self.net_g.named_modules():
-            if name == 'module.filter':
-                module.register_forward_hook(forward_hook)
-
-
-
-   
-
-
-
-
 
     def init_training_settings(self):
         self.net_g.train()
@@ -105,40 +75,35 @@ class ImageRestorationModel(BaseModel):
     def setup_optimizers(self):
         train_opt = self.opt['train']
         optim_params = []
-        optim_params_filter = []
 
         for k, v in self.net_g.named_parameters():
-            if 'filter' in k:
-                if v.requires_grad:
-                    optim_params_filter.append(v)
-            else : 
-                if v.requires_grad:
-                    optim_params.append(v)
-   
+            if v.requires_grad:
+        #         if k.startswith('module.offsets') or k.startswith('module.dcns'):
+        #             optim_params_lowlr.append(v)
+        #         else:
+                optim_params.append(v)
+                # print(k)
+            # else:
+            #     logger = get_root_logger()
+            #     logger.warning(f'Params {k} will not be optimized.')
+        # print(optim_params)
+        # ratio = 0.1
 
         optim_type = train_opt['optim_g'].pop('type')
         if optim_type == 'Adam':
             self.optimizer_g = torch.optim.Adam([{'params': optim_params}],
                                                 **train_opt['optim_g'])
-            self.optimizer_g_filter = torch.optim.Adam([{'params': optim_params_filter}],
-                                                **train_opt['optim_g'])
         elif optim_type == 'SGD':
             self.optimizer_g = torch.optim.SGD(optim_params,
                                                **train_opt['optim_g'])
-            self.optimizer_g_filter = torch.optim.SGD([{'params': optim_params_filter}],
-                                                **train_opt['optim_g'])
         elif optim_type == 'AdamW':
             self.optimizer_g = torch.optim.AdamW([{'params': optim_params}],
                                                 **train_opt['optim_g'])
-            self.optimizer_g_filter = torch.optim.AdamW([{'params': optim_params_filter}],
-                                                **train_opt['optim_g'])
-            
             pass
         else:
             raise NotImplementedError(
                 f'optimizer {optim_type} is not supperted yet.')
         self.optimizers.append(self.optimizer_g)
-        self.optimizers.append(self.optimizer_g_filter)
 
     def feed_data(self, data, is_val=False):
         self.lq = data['lq'].to(self.device)
@@ -199,6 +164,13 @@ class ImageRestorationModel(BaseModel):
         self.lq = torch.cat(parts, dim=0)
         self.idxes = idxes
 
+    def get_prune_rate(self):
+        for k, v in self.net_g.named_parameters():
+            if 'prune_rate' in k:
+                return v
+        return None
+
+
     def grids_inverse(self):
         preds = torch.zeros(self.original_size)
         b, c, h, w = self.original_size
@@ -225,164 +197,14 @@ class ImageRestorationModel(BaseModel):
         self.output = (preds / count_mt).to(self.device)
         self.lq = self.origin_lq
 
-
-    def gaussian_fgsm(self, model, x, y, epsilon=0.1, alpha=0.03, num_iter=1):
-    # def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.01, num_iter=40):
-        # Create a copy of the input tensor
-        x_perturbed = x.clone().detach()
-
-        # PGD attack loop
-        for t in range(num_iter):
-            # Forward pass to compute the model's output and loss
-            x_perturbed.requires_grad = True
-            
-            output = model(x_perturbed)
-
-            loss = self.cri_pix(output, y)
- 
-            # Backward pass to compute the gradient of the loss w.r.t. the input
-            model.zero_grad()
-
-            loss.backward()
-            grad = x_perturbed.grad 
-            # B,C,H,W = self.lq.size()
-            # random_noise = torch.randn(B,C,H,W).cuda() * 0.2
-
-            B,C,H,W = self.lq.size()
-            random_noise = torch.randn(B,C,H,W).cuda()
-            adv_random_noise = torch.abs(random_noise*0.2) * torch.sign(grad)
-
-            
-
-            
-            
-
-            adv_random_noise = adv_random_noise.cpu().numpy()
-            adv_random_noise = adv_random_noise.reshape(adv_random_noise.shape[0], -1)
-
-            # plt.hist(grad.flatten(), bins=500, range = [-0.1, 1.1])
-            
-
-            random_noise_dist = random_noise.cpu().numpy()*0.2
-            random_noise_dist = random_noise_dist.reshape(random_noise_dist.shape[0], -1)
-            plt.subplot(1,3,1)
-            plt.hist(random_noise_dist.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gaussian_noise', fontsize=8)
-
-
-            grad_dist = grad.cpu().numpy() * 30
-            grad_dist = grad_dist.reshape(grad_dist.shape[0], -1)
-            plt.subplot(1,3,2)
-            plt.hist(grad_dist.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gradient', fontsize=8)
-            # plt.savefig('adv_grad_distribution')
-
-
-            plt.subplot(1,3,3)
-            plt.hist(adv_random_noise.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gaussain_gradient', fontsize=8)
-            plt.savefig('adv_grad_distribution')
-            time.sleep(5)
-
-
-            # exit()
-            
-            # Add perturbation to the input
-            with torch.no_grad():
-                B,C,H,W = self.lq.size()
-                random_noise = torch.randn(B,C,H,W).cuda()
-                x_perturbed = x_perturbed + torch.abs(random_noise*0.2) * torch.sign(grad)
-                # x_perturbed = torch.min(torch.max(x_perturbed, x - epsilon), x + epsilon)
-                x_perturbed = torch.clamp(x_perturbed, 0, 1)
-            
-        
-        return x_perturbed.detach()
-
-
-    def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.03, num_iter=1):
-    # def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.01, num_iter=40):
-     
-        x_pgd = x.clone().detach()
-
-        # PGD attack loop
-        for t in range(num_iter):
-            # Forward pass to compute the model's output and loss
-            x_pgd.requires_grad = True
-            
-            output = model(x_pgd)
-
-            loss = self.cri_pix(output, y)
- 
-            # Backward pass to compute the gradient of the loss w.r.t. the input
-            model.zero_grad()
-
-            loss.backward()
-            grad = torch.clamp(x_pgd.grad, -(25/255), 25/255)
-            
-            # Add perturbation to the input
-            with torch.no_grad():
-                # x_pgd = x_pgd + alpha * torch.sign(grad)
-                # x_pgd = torch.min(torch.max(x_pgd, x - epsilon), x + epsilon)
-                x_pgd = torch.clamp(x_pgd + grad, 0, 1)
-            
-        
-        return x_pgd.detach()
-
-    def measuring_clipping_value(self, x):
-        ori_graph_paras = self.net_g.state_dict()
-        sub_graph_paras = self.net_g.state_dict()
-
-        mse_set = []
-        # print(x.size())
-        if len(self.maxvalue) == 0 : 
-            for i in range(len(x[0])):
-                self.maxvalue.append(torch.max(x[:, i]))
-        else : 
-            for i in range(len(x[0])):
-                # print(torch.max(x[:, i]), self.maxvalue[i])
-                self.maxvalue[i] = torch.max(torch.max(x[:, i]), self.maxvalue[i])
-
-        
-
-
-
     def optimize_parameters(self, current_iter, tb_logger):
-        # if current_iter % 1 == 1:
-        #     load_path = self.opt['path'].get('pretrain_network_g', None)
-        #     if load_path is not None:
-        #         self.load_network(self.net_g, load_path,
-        #                         self.opt['path'].get('strict_load_g', True), param_key=self.opt['path'].get('param_key', 'params'))
-
-
         self.optimizer_g.zero_grad()
-        # self.optimizer_g_filter.zero_grad()
 
         if self.opt['train'].get('mixup', False):
             self.mixup_aug()
-
-        B,C,H,W = self.lq.size()
-        random_noise = torch.randn(B,C,H,W).cuda()
-        # random gaussian form 15
-        # rand_value = torch.rand(1)*10 + 10
-        # rand_value = rand_value.cuda()
-        self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
+        # print('time1')
         preds = self.net_g(self.lq)
-
-        # if current_iter % 2 == 0:
-        # for name, module in self.net_g.named_modules():
-        #     if name == 'module.filter':
-        #         x, mask1, r_set, v_set = module.feature_map
-
-        # plt.cla()
-        # plt.clf()
-        # plt.imshow(mask.detach().cpu().unsqueeze(0).permute(1,2,0), cmap='gray')
-        # plt.title("ori_fq_mask"), plt.axis('off')
-        # plt.savefig(f'ori_fq_mask')
-
-
+        # print('time2')
         if not isinstance(preds, list):
             preds = [preds]
 
@@ -398,147 +220,44 @@ class ImageRestorationModel(BaseModel):
 
             # print('l pix ... ', l_pix)
             l_total += l_pix
-            loss_dict['l_gaussian_15'] = l_pix
+            loss_dict['l_pix'] = l_pix
 
-        # radius_factor_set = torch.tensor([0.2, 0.4 , 0.6, 0.8, 1]).cuda()
-        # value_set = torch.tensor([1, 1, 1, 0.9, 0.7]).cuda()
-        # radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4 , 0.5, 0.6, 0.7, 0.8,0.9, 1]).cuda()
-        # value_set = torch.tensor([1, 1, 1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5]).cuda()
-        # loss_r = F.mse_loss(radius_factor_set, r_set)
-        # loss_v = F.mse_loss(value_set, v_set)
-        # if current_iter < 20 :
-        #     l_total = 0. * l_total + loss_r + loss_v
-        # else : 
-        #     l_total = l_total + 0.1 * loss_r + 0.1 * loss_v
-        # l_total = r_loss
+        # perceptual loss
+        if self.cri_perceptual:
+            l_percep, l_style = self.cri_perceptual(self.output, self.gt)
+        #
+            if l_percep is not None:
+                l_total += l_percep
+                loss_dict['l_percep'] = l_percep
+            if l_style is not None:
+                l_total += l_style
+                loss_dict['l_style'] = l_style
 
 
         l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
+  
+        # print('time3')
         l_total.backward()
+        # print('time4')
+        # for name, param in self.net_g.named_parameters():
+        #     if param.requires_grad:
+        #         # if k.startswith('module.offsets') or k.startswith('module.dcns'):
+        #         #     optim_params_lowlr.append(v)
+        #         # else:
+        #         print(name, param.grad)
+
+
         use_grad_clip = self.opt['train'].get('use_grad_clip', True)
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
         self.optimizer_g.step()
-        # self.optimizer_g_filter.step()
 
-
-
-        # self.optimizer_g.zero_grad()
-        # self.optimizer_g_filter.zero_grad()
-
-        # if self.opt['train'].get('mixup', False):
-        #     self.mixup_aug()
-
-
-        # # preds = self.net_g(self.lq)
-        # # pgd_image = self.pgd_attack(self.net_g, self.lq, self.gt)
-        # B,C,H,W = self.lq.size()
-        # random_noise = torch.randn(B,C,H,W).cuda()
-        # # random gaussian form 0 to 55
-        # rand_value = torch.rand(1)*55 
-        # rand_value = rand_value.cuda()
-        # self.lq = torch.clamp(self.gt+ random_noise*(rand_value/255), 0, 1)
-        # # self.lq = self.gaussian_fgsm(self.net_g, self.lq, self.gt)
-        # preds = self.net_g(self.lq)
-
-        # # if current_iter % 2 == 0:
-        # # for name, module in self.net_g.named_modules():
-        # #     if name == 'module.filter':
-        # #         x, mask2, r_set, v_set = module.feature_map
-
-        # # plt.cla()
-        # # plt.clf()
-        # # plt.subplot(1,2,1)
-        # # plt.imshow(mask1.detach().cpu().unsqueeze(0).permute(1,2,0), cmap='gray')
-        # # plt.title("ori_fq_mask"), plt.axis('off')
-
-        # # plt.subplot(1,2,2)
-        # # plt.imshow(mask2.detach().cpu().unsqueeze(0).permute(1,2,0), cmap='gray')
-        # # plt.title("noise_fq_mask"), plt.axis('off')
-        # # plt.savefig(f'noise_fq_mask')
-
-
-        # # self.optimizer_g.zero_grad()
-
-        # # self.lq = self.pgd_attack(self.net_g, self.lq, self.gt)
-
-        # # self.optimizer_g.zero_grad()
-
-        # preds = self.net_g(self.lq)
-        
-      
-        # if not isinstance(preds, list):
-        #     preds = [preds]
-
-        # self.output = preds[-1]
-
-        # l_total = 0
-        # # loss_dict = OrderedDict()
-        # # pixel loss
-        # if self.cri_pix:
-        #     l_pix = 0.
-        #     for pred in preds:
-        #         l_pix += self.cri_pix(pred, self.gt)
-
-        #     # print('l pix ... ', l_pix)
-        #     l_total += l_pix
-        #     loss_dict['l_gaussian_0_to_55'] = l_pix
-
-        # # l_total = 0. * l_total + 0. * sum(p.sum() for p in self.net_g.parameters()) + loss_r + loss_v
-        # # radius_factor_set = torch.tensor([0.2, 0.4 , 0.6, 0.8, 1]).cuda()
-        # # value_set = torch.tensor([1, 0.8, 0.6, 0.4, 0.2]).cuda()
-        # # radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4 , 0.5, 0.6, 0.7, 0.8, 0.9, 1]).cuda()
-        # # value_set = torch.tensor([1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]).cuda()
-        # # loss_r = F.mse_loss(radius_factor_set, r_set)
-        # # loss_v = F.mse_loss(value_set, v_set)
-        # # if current_iter < 20 :
-        # #     l_total = 0. * l_total  + loss_r + loss_v
-        # # else : 
-        # #     l_total = l_total + 0.1 * loss_r + 0.1 *loss_v
-
-  
-        # l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
-        # l_total.backward()
-        # use_grad_clip = self.opt['train'].get('use_grad_clip', True)
-        # if use_grad_clip:
-        #     torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
-        # self.optimizer_g_filter.step()
-        # self.optimizer_g.step()
+       
 
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
-
-    def get_prune_rate(self):
-        return self.prune_rate 
-
-    def change_test_mode(self, mode):
-        self.test_mode = mode
-   
-            
-   
-
-
     def test(self):
-        self.net_g.train()
-
-        if self.test_mode == 'real':
-            self.lq = self.lq
-        elif self.test_mode == 'adv':
-            self.lq = self.pgd_attack(self.net_g, self.gt, self.gt)
-        elif self.test_mode =='seen_noise':
-            B,C,H,W = self.lq.size()
-            # rand_value = torch.rand(1)*20 + 5
-            # rand_value = rand_value.cuda()
-            random_noise = torch.randn(B,C,H,W).cuda()
-            self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
-            # random_noise = torch.randn(B,C,H,W).cuda()
-            # self.lq = torch.clamp(self.lq+ random_noise*0.2, 0, 1)
-        elif self.test_mode =='unseen_noise':
-            B,C,H,W = self.lq.size()
-            random_noise = torch.randn(B,C,H,W).cuda()
-            self.lq = torch.clamp(self.gt+ random_noise*(50/255), 0, 1)
-
         self.net_g.eval()
         with torch.no_grad():
             n = len(self.lq)
@@ -664,11 +383,7 @@ class ImageRestorationModel(BaseModel):
         keys = []
         metrics = []
         for name, value in self.collected_metrics.items():
-            if name != 'cnt':
-                keys.append(name+'_'+self.test_mode)
-            else : 
-                keys.append(name)
-            # keys.append(name)
+            keys.append(name)
             metrics.append(value)
         metrics = torch.stack(metrics, 0)
         torch.distributed.reduce(metrics, dst=0)
@@ -700,10 +415,8 @@ class ImageRestorationModel(BaseModel):
         for metric, value in metric_dict.items():
             log_str += f'\t # {metric}: {value:.4f}'
             
-        # logger = get_root_logger()
-        # logger.info(log_str)
-        if self.opt['rank'] == 0:
-            print(log_str)
+        logger = get_root_logger()
+        logger.info(log_str)
         
 
         log_dict = OrderedDict()
@@ -734,18 +447,19 @@ class ImageRestorationModel(BaseModel):
         # f = open("orivalue.txt", 'w')
         
         for k, v in self.net_g.named_parameters():
-            if 'conv' in k and 'weight' in k:
+            if 'intro' in k and 'weight' in k:
 
                 # print(k, torch.std_mean(v))
+                print(k, v)
                 
                 # sys.stdout = open('fftvalue.txt', 'w')
                 # print(k, v.size())
                 # print(k, torch.fft.fftn(v, dim=(-1,-2)))
                 # f.write(str(k) + str(torch.fft.fftn(v, dim=(-1,-2))) + "\n")
-                f.write(str(k) + str(v) + "\n")
+                # f.write(str(k) + str(v) + "\n")
                 
                 # sys.stdout.close()
         # f.close()
 
-    def get_prune_rate(self):
-        return self.prune_rate 
+     
+

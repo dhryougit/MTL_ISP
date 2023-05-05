@@ -5,10 +5,10 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet-SIDD-width32-ffctest
+name: NAFNet-SIDD-width32-ffttest
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 4
+num_gpu: 2
 manual_seed: 10
 
 datasets:
@@ -29,7 +29,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 4
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 

@@ -40,7 +40,7 @@ class MessageLogger():
       
 
     @master_only
-    def __call__(self, log_vars, radius=None):
+    def __call__(self, log_vars, prune_rate=None):
         """Format logging message.
 
         Args:
@@ -54,7 +54,6 @@ class MessageLogger():
         """
         # epoch, iter, learning rates
         exist_idx = 0
-        exist_adv = 0
         epoch = log_vars.pop('epoch')
         current_iter = log_vars.pop('iter')
         total_iter = log_vars.pop('total_iter')
@@ -81,40 +80,39 @@ class MessageLogger():
         if 'idx' in log_vars.keys():
             idx = log_vars.pop('idx')
             exist_idx = 1
-
-        if 'l_pix_adv' in log_vars.keys():
-            l_pix_adv = log_vars.pop('l_pix_adv')
-            exist_adv = 1
       
 
-        if radius != None:
-            wandb.log({'radius': radius}, step = current_iter)
+
 
         # other items, especially losses
         for k, v in log_vars.items():
             message += f'{k}: {v:.4e} '
             # tensorboard logger
-            # if self.use_tb_logger and 'debug' not in self.exp_name:
-            normed_step = 10000 * (current_iter / total_iter)
-            normed_step = int(normed_step)
+            if self.use_tb_logger and 'debug' not in self.exp_name:
+                normed_step = 10000 * (current_iter / total_iter)
+                normed_step = int(normed_step)
 
-            if k.startswith('l_'):         
-                # if k == 'l_pix_adv':
-                if exist_adv == 1:
-                    wandb.log({f'losses/{k}': v, 'losses/l_pix_adv': l_pix_adv}, step=current_iter)
+                if k.startswith('l_'):         
+                    if prune_rate != None:
+                        wandb.log({f'losses/{k}': v}, step = current_iter)
+                        # wandb.log({f'losses/{k}': v, f'prune_rate': prune_rate})
+                    else : 
+                        wandb.log({f'losses/{k}': v}, step = current_iter)
+
+                elif k.startswith('m_'):
+                    if prune_rate != None:
+                        if exist_idx == 1:
+                            wandb.log({f'metrics/{k}': v, f'idx':idx, f'prune_rate': prune_rate}, step = current_iter)
+                        else :
+                            wandb.log({f'metrics/{k}': v, f'prune_rate': prune_rate}, step = current_iter)
+                    else :
+                        if exist_idx == 1:
+                            wandb.log({f'metrics/{k}': v, f'idx':idx}, step = current_iter)
+                        else :
+                            wandb.log({f'metrics/{k}': v}, step = current_iter)
+
                 else:
-                    wandb.log({f'losses/{k}': v}, step=current_iter)
-                # else:
-                #     wandb.log({f'losses/{k}': v}, step=current_iter)
-                
-
-            elif k.startswith('m_'):
-                if exist_idx == 1:
-                    wandb.log({f'metrics/{k}': v, f'idx':idx }, step=current_iter)
-                else :
-                    wandb.log({f'metrics/{k}': v}, step=current_iter)
-            else:
-                assert 1 == 0
+                    assert 1 == 0
                 # else:
                 #     self.tb_logger.add_scalar(k, v, current_iter)
         # if self.opt['rank'] == 0:
@@ -151,7 +149,7 @@ def init_wandb_logger(opt):
         name=opt['name'],
         config=opt,
         project=project,
-        sync_tensorboard=False)
+        sync_tensorboard=True)
 
     wandb.config.update(opt)
 

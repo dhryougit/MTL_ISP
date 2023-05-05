@@ -40,4 +40,6 @@ __all__ = [
     'create_lmdb_for_reds',
     'create_lmdb_for_gopro',
     'create_lmdb_for_rain13k',
+    'print_model_param_nums',
+    'count_model_param_flops',
 ]

@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: Baseline-SIDD-width32
+name: Baseline-SIDD-width32-4bit
 model_type: ImageRestorationModel
 scale: 1
 num_gpu: 4

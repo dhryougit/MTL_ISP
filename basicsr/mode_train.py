@@ -84,12 +84,12 @@ def init_loggers(opt):
     logger.info(dict2str(opt))
 
     # initialize wandb logger before tensorboard logger to allow proper sync:
-    if (opt['logger'].get('wandb')
-            is not None) and (opt['logger']['wandb'].get('project')
-                              is not None) and ('debug' not in opt['name']):
-        assert opt['logger'].get('use_tb_logger') is True, (
-            'should turn on tensorboard when using wandb')
-        init_wandb_logger(opt)
+    # if (opt['logger'].get('wandb')
+    #         is not None) and (opt['logger']['wandb'].get('project')
+    #                           is not None) and ('debug' not in opt['name']):
+    #     assert opt['logger'].get('use_tb_logger') is True, (
+    #         'should turn on tensorboard when using wandb')
+    init_wandb_logger(opt)   
     tb_logger = None
     if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
         # tb_logger = init_tb_logger(log_dir=f'./logs/{opt['name']}') #mkdir logs @CLY
@@ -154,7 +154,7 @@ def main():
     # torch.backends.cudnn.deterministic = True
 
     # automatic resume ..
-    state_folder_path = 'experiments/{}/training_states/'.format(opt['name'])
+    state_folder_path = '/131_data/dhryou/NAFNet/experiments/{}/training_states/'.format(opt['name'])
     import os
     try:
         states = os.listdir(state_folder_path)
@@ -231,6 +231,25 @@ def main():
 
     # for epoch in range(start_epoch, total_epochs + 1):
     epoch = start_epoch
+
+    modes = ['real', 'seen_noise', 'unseen_noise']
+    for mode in modes:
+        model.change_test_mode(mode)
+        if opt.get('val') is not None and (current_iter == 0):
+            rgb2bgr = opt['val'].get('rgb2bgr', True)
+            # wheather use uint8 image to compute metrics
+            use_image = opt['val'].get('use_image', True)
+            model.validation(val_loader, current_iter, tb_logger,
+                                opt['val']['save_img'], rgb2bgr, use_image )
+            log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
+            log_vars.update({'lrs': model.get_current_learning_rate()})
+            log_vars.update(model.get_current_log())
+
+            prune_rate = model.get_prune_rate()
+            if opt['rank'] == 0:
+                msg_logger(log_vars, prune_rate)
+
+
     while current_iter <= total_iters:
         train_sampler.set_epoch(epoch)
         prefetcher.reset()
@@ -246,38 +265,80 @@ def main():
             model.update_learning_rate(
                 current_iter, warmup_iter=opt['train'].get('warmup_iter', -1))
             # training
+
             model.feed_data(train_data, is_val=False)
+
+    
             result_code = model.optimize_parameters(current_iter, tb_logger)
+         
             # if result_code == -1 and tb_logger:
             #     print('loss explode .. ')
             #     exit(0)
             iter_time = time.time() - iter_time
             # log
-            if current_iter % opt['logger']['print_freq'] == 0:
+
+
+            # if current_iter % opt['logger']['print_freq'] == 0:
+
+            if current_iter % 50 == 0:
                 log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
                 log_vars.update({'lrs': model.get_current_learning_rate()})
                 log_vars.update({'time': iter_time, 'data_time': data_time})
                 log_vars.update(model.get_current_log())
-                # print('msg logger .. ', current_iter)
-                msg_logger(log_vars)
-
-            # save models and training states
-            if current_iter % opt['logger']['save_checkpoint_freq'] == 0:
+ 
+                prune_rate = model.get_prune_rate()
+                if opt['rank'] == 0:
+                    # radius = model.get_radius_set()
+                    radius = None
+                    # radius = a.data.item()
+                    msg_logger(log_vars, radius)
+                    # a = model.get_lpf_radius()
+                    # radius = a.data.item()
+                    # msg_logger(log_vars, radius)
+                    # msg_logger(log_vars, prune_rate)
+    
+                # msg_logger(log_vars, prune_rate)
+           
+            
+            if current_iter % 3000 == 0:
                 logger.info('Saving models and training states.')
                 model.save(epoch, current_iter)
 
-            # validation
-            if opt.get('val') is not None and (current_iter % opt['val']['val_freq'] == 0 or current_iter == 1000):
-            # if opt.get('val') is not None and (current_iter % opt['val']['val_freq'] == 0):
-                rgb2bgr = opt['val'].get('rgb2bgr', True)
-                # wheather use uint8 image to compute metrics
-                use_image = opt['val'].get('use_image', True)
-                model.validation(val_loader, current_iter, tb_logger,
-                                 opt['val']['save_img'], rgb2bgr, use_image )
-                log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
-                log_vars.update({'lrs': model.get_current_learning_rate()})
-                log_vars.update(model.get_current_log())
-                msg_logger(log_vars)
+      
+            # every 2 iteration validsion
+            if (current_iter % 200 == 0) : 
+                # modes = ['ori', 'adv', 'noise']
+                # modes = ['real', 'adv', 'seen_noise', 'unseen_noise']
+                modes = ['real', 'seen_noise', 'unseen_noise']
+                # modes = ['ori', 'noise']
+                for mode in modes:
+                    model.change_test_mode(mode)
+                    prune_rate = model.get_prune_rate()
+                    rgb2bgr = opt['val'].get('rgb2bgr', True)
+                    # wheather use uint8 image to compute metrics
+                    use_image = opt['val'].get('use_image', True)
+                    model.validation(val_loader, current_iter, tb_logger,
+                                        opt['val']['save_img'], rgb2bgr, use_image )
+                    log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
+                    log_vars.update({'lrs': model.get_current_learning_rate()})
+                    log_vars.update(model.get_current_log())
+                    # msg_logger(log_vars)
+
+                    # a = model.get_lpf_radious()
+                    # radius = a.data.item()
+                    # msg_logger(log_vars, radius)
+
+                    prune_rate = model.get_prune_rate()
+                    if opt['rank'] == 0:
+                        # radius = model.get_radius_set()
+                        radius = None
+                        # radius = a.data.item()
+                        msg_logger(log_vars, radius)
+                        # a = model.get_lpf_radius()
+                        # radius = a.data.item()
+                        # msg_logger(log_vars, radius)
+                        # msg_logger(log_vars, prune_rate)
+                    # msg_logger(log_vars, prune_rate)
 
 
             data_time = time.time()

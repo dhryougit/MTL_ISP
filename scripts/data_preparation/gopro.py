@@ -20,15 +20,15 @@ def main():
     opt['n_thread'] = 20
     opt['compression_level'] = 3
 
-    opt['input_folder'] = './datasets/GoPro/train/input'
-    opt['save_folder'] = './datasets/GoPro/train/blur_crops'
+    opt['input_folder'] = '/data/GoPro/train/input'
+    opt['save_folder'] = '/data/GoPro/train/blur_crops'
     opt['crop_size'] = 512
     opt['step'] = 256
     opt['thresh_size'] = 0
     extract_subimages(opt)
 
-    opt['input_folder'] = './datasets/GoPro/train/target'
-    opt['save_folder'] = './datasets/GoPro/train/sharp_crops'
+    opt['input_folder'] = '/data/GoPro/train/target'
+    opt['save_folder'] = '/data/GoPro/train/sharp_crops'
     opt['crop_size'] = 512
     opt['step'] = 256
     opt['thresh_size'] = 0

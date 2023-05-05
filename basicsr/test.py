@@ -50,7 +50,9 @@ def main():
         test_loaders.append(test_loader)
 
     # create model
+
     model = create_model(opt)
+
 
     for test_loader in test_loaders:
         test_set_name = test_loader.dataset.opt['name']
@@ -58,6 +60,7 @@ def main():
         rgb2bgr = opt['val'].get('rgb2bgr', True)
         # wheather use uint8 image to compute metrics
         use_image = opt['val'].get('use_image', True)
+        print('testsetstset')
         model.validation(
             test_loader,
             current_iter=opt['name'],

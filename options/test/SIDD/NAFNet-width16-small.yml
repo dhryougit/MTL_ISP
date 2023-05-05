@@ -5,44 +5,38 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet-SIDD-width64-test
+name: NAFNet-SIDD-width16-test
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 4 # set num_gpu: 0 for cpu mode
+num_gpu: 2 # set num_gpu: 0 for cpu mode
 manual_seed: 10
 
 # dataset and data loader settings
 datasets:
+
   val:
     name: SIDD_val
     type: PairedImageDataset
 
-    dataroot_gt: /131_data/datasets/sidd/SIDD/val/gt_crops.lmdb
-    dataroot_lq: /131_data/datasets/sidd/SIDD/val/input_crops.lmdb
+    dataroot_gt: ./datasets/SIDD/val/gt_crops.lmdb
+    dataroot_lq: ./datasets/SIDD/val/input_crops.lmdb
 
     io_backend:
       type: lmdb
 
-    # batch_size_per_gpu: 4
-
 # network structures
 network_g:
   type: NAFNet
-  width: 64
-  enc_blk_nums: [2, 2, 4, 8]
-  middle_blk_num: 12
+  width: 16
+  enc_blk_nums: [2, 2, 2, 2]
+  middle_blk_num: 2
   dec_blk_nums: [2, 2, 2, 2]
 
 # path
 path:
-  pretrain_network_g: ./finetuned_models/NAFNet-SIDD-width64.pth
-  # pretrain_network_g: ./finetuned_models/NAFNet-weight64-advtrained.pth
-  
-  # pretrain_network_g: ./finetuned_models/adv-training.pth
-  # pretrain_network_g: ./finetuned_modelss/pr0.5-lfs.pth
-  # pretrain_network_g: ./finetuned_models/pr0.9-ori.pth
-  # strict_load_g: true
-  strict_load_g: False
+  # pretrain_network_g: ./experiments/NAFNet-SIDD-width16-fft-small-no3x3/models/net_g_latest.pth
+  pretrain_network_g: ~
+  strict_load_g: true
   resume_state: ~
 
 # validation settings

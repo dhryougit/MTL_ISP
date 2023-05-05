@@ -42,7 +42,7 @@ def main():
     # print(opt)
     model = create_model(opt)
 
-    model.print_values()
+    # model.print_values()
 
     model.feed_data(data={'lq': img.unsqueeze(dim=0)})
 
