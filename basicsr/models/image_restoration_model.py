@@ -6,6 +6,7 @@
 # ------------------------------------------------------------------------
 import importlib
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 from copy import deepcopy
@@ -17,10 +18,16 @@ from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.dist_util import get_dist_info
 
+
 import matplotlib.pyplot as plt
 
 import wandb
 import sys
+
+from advertorch.attacks4IP.zero_mean_pgd import L2PGDAttack
+import math
+torch.autograd.set_detect_anomaly(True)
+
 
 loss_module = importlib.import_module('basicsr.models.losses')
 metric_module = importlib.import_module('basicsr.metrics')
@@ -43,6 +50,16 @@ class ImageRestorationModel(BaseModel):
         self.net_g = self.model_to_device(self.net_g)
         self.prune_rate = 0
         self.test_mode = 'ori'
+
+        self.alpha = 2.
+        eps = 5
+        patch_size=50
+        l2_adv_tr = eps*1./255 * math.sqrt(patch_size ** 2)
+        attack = (L2PGDAttack, dict(loss_fn=nn.MSELoss(), 
+                        eps=l2_adv_tr, nb_iter=1, eps_iter=1*l2_adv_tr, rand_init=False, clip_min=0.0, clip_max=1.0, targeted=False))
+        self.adversary = attack[0](self.net_g, **attack[1])
+        
+        
 
         self.maxvalue = []
    
@@ -252,10 +269,7 @@ class ImageRestorationModel(BaseModel):
             random_noise = torch.randn(B,C,H,W).cuda()
             adv_random_noise = torch.abs(random_noise*0.2) * torch.sign(grad)
 
-            
-
-            
-            
+   
 
             adv_random_noise = adv_random_noise.cpu().numpy()
             adv_random_noise = adv_random_noise.reshape(adv_random_noise.shape[0], -1)
@@ -265,27 +279,7 @@ class ImageRestorationModel(BaseModel):
 
             random_noise_dist = random_noise.cpu().numpy()*0.2
             random_noise_dist = random_noise_dist.reshape(random_noise_dist.shape[0], -1)
-            plt.subplot(1,3,1)
-            plt.hist(random_noise_dist.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gaussian_noise', fontsize=8)
-
-
-            grad_dist = grad.cpu().numpy() * 30
-            grad_dist = grad_dist.reshape(grad_dist.shape[0], -1)
-            plt.subplot(1,3,2)
-            plt.hist(grad_dist.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gradient', fontsize=8)
-            # plt.savefig('adv_grad_distribution')
-
-
-            plt.subplot(1,3,3)
-            plt.hist(adv_random_noise.flatten(), bins=100, range = [-0.75, 0.75])
-            plt.show()
-            plt.title('gaussain_gradient', fontsize=8)
-            plt.savefig('adv_grad_distribution')
-            time.sleep(5)
+    
 
 
             # exit()
@@ -331,56 +325,63 @@ class ImageRestorationModel(BaseModel):
         
         return x_pgd.detach()
 
-    def measuring_clipping_value(self, x):
-        ori_graph_paras = self.net_g.state_dict()
-        sub_graph_paras = self.net_g.state_dict()
 
-        mse_set = []
-        # print(x.size())
-        if len(self.maxvalue) == 0 : 
-            for i in range(len(x[0])):
-                self.maxvalue.append(torch.max(x[:, i]))
-        else : 
-            for i in range(len(x[0])):
-                # print(torch.max(x[:, i]), self.maxvalue[i])
-                self.maxvalue[i] = torch.max(torch.max(x[:, i]), self.maxvalue[i])
+    def set_requires_grad(self, nets, requires_grad=False):
+        if not isinstance(nets, list):
+            nets = [nets]
+        for net in nets:
+            if net is not None:
+                for param in net.parameters():
+                    param.requires_grad = requires_grad
+
+    def obsattack(self):
+        self.net_g.eval()
+        self.set_requires_grad([self.net_g], False)
+        # B,C,H,W = self.gt.size()
+        # random_noise = torch.randn(B,C,H,W).cuda()
+        # # random gaussian form 0 to 55
+        # rand_value = torch.rand(1)*55
+        # rand_value = rand_value.cuda()
+        # noise = torch.clamp(self.gt+ random_noise*(rand_value/255), 0, 1)
+        noise = self.lq
+        data_adv = self.adversary.perturb(noise, self.gt)
+
+        self.set_requires_grad([self.net_g], True)
+        self.net_g.train()
 
         
 
 
+        return data_adv, noise
+        
+
 
     def optimize_parameters(self, current_iter, tb_logger):
-        # if current_iter % 1 == 1:
-        #     load_path = self.opt['path'].get('pretrain_network_g', None)
-        #     if load_path is not None:
-        #         self.load_network(self.net_g, load_path,
-        #                         self.opt['path'].get('strict_load_g', True), param_key=self.opt['path'].get('param_key', 'params'))
 
+
+        
+        
+        B,C,H,W = self.lq.size()
+        random_noise = torch.randn(B,C,H,W).cuda()
+        self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
+        adv, noise = self.obsattack()
+        
 
         self.optimizer_g.zero_grad()
         # self.optimizer_g_filter.zero_grad()
-
         if self.opt['train'].get('mixup', False):
             self.mixup_aug()
 
-        B,C,H,W = self.lq.size()
-        random_noise = torch.randn(B,C,H,W).cuda()
-        # random gaussian form 15
-        # rand_value = torch.rand(1)*10 + 10
-        # rand_value = rand_value.cuda()
-        self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
+
         preds = self.net_g(self.lq)
+     
 
         # if current_iter % 2 == 0:
         # for name, module in self.net_g.named_modules():
         #     if name == 'module.filter':
         #         x, mask1, r_set, v_set = module.feature_map
 
-        # plt.cla()
-        # plt.clf()
-        # plt.imshow(mask.detach().cpu().unsqueeze(0).permute(1,2,0), cmap='gray')
-        # plt.title("ori_fq_mask"), plt.axis('off')
-        # plt.savefig(f'ori_fq_mask')
+ 
 
 
         if not isinstance(preds, list):
@@ -413,8 +414,31 @@ class ImageRestorationModel(BaseModel):
         # l_total = r_loss
 
 
-        l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
-        l_total.backward()
+        # l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
+
+
+        # l_total.backward()
+
+        # adv loss 추가
+ 
+        l_adv = 0.
+        l_adv += self.cri_pix(self.net_g(adv)-self.output, torch.zeros_like(self.gt))
+        loss_dict['l_adv'] = l_adv
+
+   
+            
+      
+        # l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
+
+
+        # loss = ( l_total * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) / (2* batch_size)
+        loss = ( l_total * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) + 0. * sum(p.sum() for p in self.net_g.parameters())
+        loss.backward()
+
+
+        
+        
+
         use_grad_clip = self.opt['train'].get('use_grad_clip', True)
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)

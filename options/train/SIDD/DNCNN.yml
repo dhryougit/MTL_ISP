@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: DNCNN-15-train
+name: DNCNN-15-train-advobs
 model_type: ImageRestorationModel
 scale: 1
 num_gpu: 2
@@ -29,7 +29,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 32
+    batch_size_per_gpu: 2
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -108,7 +108,7 @@ logger:
   use_tb_logger: true
   wandb:
     # project: test-project
-    project: test
+    project: Robust
     resume_id: ~
 
 # dist training settings

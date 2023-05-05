@@ -208,7 +208,7 @@ if __name__ == '__main__':
     # middle_blk_num = 1
     # dec_blks = [1, 1, 1, 1]
     
-    net = DnCNN()
+    net = DNCNN_filter()
 
   
     inp_shape = (3, 256, 256)
@@ -216,7 +216,7 @@ if __name__ == '__main__':
     from ptflops import get_model_complexity_info
     from torchsummary import summary as summary_
 
-    summary_(net.cuda(),(3, 256, 256),batch_size=1)
+    # summary_(net.cuda(),(3, 256, 256),batch_size=1)
 
     macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=True)
 
