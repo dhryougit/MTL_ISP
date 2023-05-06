@@ -177,9 +177,6 @@ class Adaptive_freqfilter_classification(nn.Module):
         self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
         self.down3 = nn.Conv2d(64, 128, 2, 2, bias=True)
 
-        self.conv4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down4 = nn.Conv2d(128, 256, 2, 2, bias=True)
-
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
         self.relu = nn.ReLU()
         self.sig = nn.Sigmoid()
@@ -188,13 +185,13 @@ class Adaptive_freqfilter_classification(nn.Module):
         
 
         self.fclayer_v1 = nn.Linear(128, 256)
-        self.fclayer_v2 = nn.Linear(256, 3)
+        self.fclayer_v2 = nn.Linear(256, 5)
 
         # self.multset = torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6 ,1.8, 2.0]).cuda()
-        self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
+        # self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
         # self.radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
 
-        self.radius_factor_set = torch.tensor([0.3, 0.6,  1.0]).cuda()
+        self.radius_factor_set = torch.tensor([0.3, 0.5, 0.7, 1.0]).cuda()
 
 
     def forward(self, x):
@@ -224,10 +221,7 @@ class Adaptive_freqfilter_classification(nn.Module):
         y = self.conv3(y)
         y = self.relu(y)
         y = self.down3(y)
-        # y = self.conv4(y)
-        # y = self.relu(y)
-        # y = self.down4(y)
-
+    
         y = self.avgpool(y)
         y = y.squeeze(-1)
         y = y.squeeze(-1)
@@ -242,6 +236,7 @@ class Adaptive_freqfilter_classification(nn.Module):
         # print(value_set)
         value_set = value_set / self.temp
         value_set = self.soft(value_set)
+        value_set = value_set[:4]
         # print(value_set)
      
         
@@ -249,7 +244,7 @@ class Adaptive_freqfilter_classification(nn.Module):
 
         # mask = [torch.sigmoid(radius_set[0].to(x.device) - dist.to(x.device)) * value_set_sum[0]]
         mask = []
-        for i in range(3):
+        for i in range(4):
             mask.append(torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) * value_set[i])
         
         fq_mask = torch.sum(torch.stack(mask, dim=0), dim=0)
@@ -268,10 +263,24 @@ class Adaptive_freqfilter_classification(nn.Module):
 
         return lowpass, fq_mask, self.radius_factor_set, value_set, x_fq
 
+
 class Lowpassfilter(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.alpha = nn.Parameter(torch.tensor(100.))
+
+        self.radius1 = nn.Parameter(torch.tensor(0.3))
+        self.radius1_val = nn.Parameter(torch.tensor(1.0))
+
+        self.radius2 = nn.Parameter(torch.tensor(0.5))
+        self.radius2_val = nn.Parameter(torch.tensor(0.7))
+
+        self.radius3 = nn.Parameter(torch.tensor(0.7))
+        self.radius3_val = nn.Parameter(torch.tensor(0.5))
+
+        self.radius4 = nn.Parameter(torch.tensor(1.0))
+        self.radius4_val = nn.Parameter(torch.tensor(0.2))
+
+     
 
 
     def forward(self, x):
@@ -281,80 +290,22 @@ class Lowpassfilter(nn.Module):
         a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
         dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
         
-        # print(self.alpha)
         # radius = math.sqrt(H*H+W*W)/self.alpha
-
-        # mid band pass
-        
-        # low band pass
-        
-
-
-        # high band pass
-        # radius1 = (H/2)*0.01
-        # radius2 = (H/2)*10
-
-
-        # mask = dist < radius.to(dist.device)
-        # mask = torch.sigmoid(radius.to(dist.device) - dist)
-        # mask = (dist > radius1) or (dist < radius2)
-
-        # low pass filter
-        radius1 = -1
-        radius2 = (H/2)*0.9
-        pass_filter1 = torch.logical_and(dist > radius1, dist < radius2).to(torch.float32).to(x.device)
-
-        # mid pass filter 
-        radius1 = (H/2)*0.1
-        radius2 = (H/2)*0.1
-        pass_filter2 = torch.logical_and(dist > radius1, dist < radius2).to(torch.float32).to(x.device)
-
-        pass_filter = pass_filter1 - pass_filter2*0.5
-        # # pass_filter = mask.to(torch.float32).to(x.device)
-
-        # Create a Gaussian kernel with standard deviation equal to the filter radius
-        # pass_filter = torch.tensor(np.exp(-(dist / 1000000000)**2), dtype=torch.float32, device=x.device)
-
-        # pass_filter = (1/(dist+100))
-
-        # # Normalize the kernel so that its sum is equal to 1
-        # pass_filter /= torch.sum(pass_filter)
-
-        # pass_filter = pass_filter.to(torch.float32).to(x.device)
+        radius1 = (math.sqrt(H*H+W*W)/2)*self.radius1
+        radius2 = (math.sqrt(H*H+W*W)/2)*self.radius2
+        radius3 = (math.sqrt(H*H+W*W)/2)*self.radius3
+        radius4 = (math.sqrt(H*H+W*W)/2)*self.radius4
    
-        x = torch.fft.fftn(x, dim=(-1,-2))
-        x = torch.fft.fftshift(x)
-
-        remain_frequency = (x*pass_filter)
-
-        remain_frequency = torch.fft.ifftshift(remain_frequency)
-
-        remain_frequency = torch.fft.ifftn(remain_frequency, dim=(-1,-2))
-
-        remain_frequency = torch.clamp(torch.abs(remain_frequency), 0, 1)
-
-        # print(pass_filter)
-
-        return remain_frequency, pass_filter
-
-class Lowpassfilter(nn.Module):
-    def __init__(self, alpha):
-        super().__init__()
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-
-
-    def forward(self, x):
-        B, C, H, W = x.size()
-        inp = x
-
-        a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
-        dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
-        
-        # print(self.alpha)
-        # radius = math.sqrt(H*H+W*W)/self.alpha
-        radius = (H/2)*self.alpha
         # mask = dist < radius.to(dist.device)
-        mask = torch.sigmoid(radius.to(dist.device) - dist)
+        mask1 = torch.sigmoid(radius1.to(x.device) - dist.to(x.device)) * self.radius1_val
+        mask2 = (torch.sigmoid(radius2.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius1.to(x.device) - dist.to(x.device))) * self.radius2_val
+        mask3 = (torch.sigmoid(radius3.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius2.to(x.device) - dist.to(x.device))) * self.radius3_val
+        mask4 = (torch.sigmoid(radius4.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius3.to(x.device) - dist.to(x.device))) * self.radius4_val
+   
+        # mask = torch.clamp(mask1+mask2+mask3+mask4+mask5+mask6+mask7+mask8, 0, 1)
+        mask = mask1+mask2+mask3+mask4
+
+
         lpf = mask.to(torch.float32).to(x.device)
    
         x = torch.fft.fftn(x, dim=(-1,-2))
@@ -436,7 +387,7 @@ class NAFBlock(nn.Module):
         return y + x * self.gamma
 
 
-class Lowpassfilter(nn.Module):
+class Fix_lowpassfilter(nn.Module):
     def __init__(self):
         super().__init__()
         self.factor = torch.tensor(0.7)
@@ -485,6 +436,7 @@ class NAFNet(nn.Module):
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
         self.filter = Adaptive_freqfilter_classification()
+        self.filter = Lowpassfilter()
         # self.filter = Adaptive_freqfilter_regression()
         # self.filter = Lowpassfilter()
         self.mask = {}
