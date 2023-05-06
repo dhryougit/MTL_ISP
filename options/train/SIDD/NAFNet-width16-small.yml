@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: test-everyiter-NAFNet16-small
+name: NAFNet16-small-15-train-adv-alpha0.2
 model_type: ImageRestorationModel
 scale: 1
 num_gpu: 2
@@ -56,6 +56,7 @@ path:
   # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-SIDD-width16-5-to-25-filter/models/net_g_60000.pth
   strict_load_g: true
   resume_state: ~
+  root: '/131_data/dhryou/NAFNet'
 
 # training settings
 train:
@@ -108,7 +109,7 @@ logger:
   use_tb_logger: false
   wandb:
     # project: test-project
-    project: test
+    project: Robust
     resume_id: ~
 
 # dist training settings
