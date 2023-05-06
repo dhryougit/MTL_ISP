@@ -71,7 +71,7 @@ def parse(opt_path, is_train=True):
     # opt['path']['root'] = osp.abspath(
     #     osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
 
-    opt['path']['root'] = '/131_data/dhryou/NAFNet'
+    # opt['path']['root'] = '/131_data/dhryou/NAFNet'
     
     if is_train:
         experiments_root = osp.join(opt['path']['root'], 'experiments',
