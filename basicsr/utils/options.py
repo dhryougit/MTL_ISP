@@ -68,8 +68,11 @@ def parse(opt_path, is_train=True):
         if (val is not None) and ('resume_state' in key
                                   or 'pretrain_network' in key):
             opt['path'][key] = osp.expanduser(val)
-    opt['path']['root'] = osp.abspath(
-        osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
+    # opt['path']['root'] = osp.abspath(
+    #     osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
+
+    opt['path']['root'] = '/131_data/dhryou/NAFNet'
+    
     if is_train:
         experiments_root = osp.join(opt['path']['root'], 'experiments',
                                     opt['name'])
