@@ -349,23 +349,23 @@ class ImageRestorationModel(BaseModel):
         self.set_requires_grad([self.net_g], True)
         self.net_g.train()
 
-        
-
-
         return data_adv, noise
         
 
 
     def optimize_parameters(self, current_iter, tb_logger):
 
-
-        
         
         B,C,H,W = self.lq.size()
         random_noise = torch.randn(B,C,H,W).cuda()
-        self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
-        adv, noise = self.obsattack()
-        
+        sigma = (torch.rand(B) * 55) * 1./255
+        sigma = sigma.cuda()
+        noise = random_noise * sigma.view(-1,1,1,1)
+
+        self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+
+        if self.opt['train']['adv']:
+            adv, noise = self.obsattack()
 
         self.optimizer_g.zero_grad()
         # self.optimizer_g_filter.zero_grad()
@@ -374,14 +374,6 @@ class ImageRestorationModel(BaseModel):
 
 
         preds = self.net_g(self.lq)
-     
-
-        # if current_iter % 2 == 0:
-        # for name, module in self.net_g.named_modules():
-        #     if name == 'module.filter':
-        #         x, mask1, r_set, v_set = module.feature_map
-
- 
 
 
         if not isinstance(preds, list):
@@ -399,52 +391,29 @@ class ImageRestorationModel(BaseModel):
 
             # print('l pix ... ', l_pix)
             l_total += l_pix
-            loss_dict['l_gaussian_15'] = l_pix
+            loss_dict['l_gaussian_0_55'] = l_pix
 
-        # radius_factor_set = torch.tensor([0.2, 0.4 , 0.6, 0.8, 1]).cuda()
-        # value_set = torch.tensor([1, 1, 1, 0.9, 0.7]).cuda()
-        # radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4 , 0.5, 0.6, 0.7, 0.8,0.9, 1]).cuda()
-        # value_set = torch.tensor([1, 1, 1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5]).cuda()
-        # loss_r = F.mse_loss(radius_factor_set, r_set)
-        # loss_v = F.mse_loss(value_set, v_set)
-        # if current_iter < 20 :
-        #     l_total = 0. * l_total + loss_r + loss_v
-        # else : 
-        #     l_total = l_total + 0.1 * loss_r + 0.1 * loss_v
-        # l_total = r_loss
-
-
-        # l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
-
-
-        # l_total.backward()
-
+    
+        if self.opt['train']['adv']:
         # adv loss 추가
- 
-        l_adv = 0.
-        l_adv += self.cri_pix(self.net_g(adv)-self.output, torch.zeros_like(self.gt))
-        loss_dict['l_adv'] = l_adv
+            l_adv = 0.
+            l_adv += self.cri_pix(self.net_g(adv), self.output)
+            loss_dict['l_adv'] = l_adv
+            loss = ( l_total * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) + 0. * sum(p.sum() for p in self.net_g.parameters())
+            loss.backward()
 
-   
-            
-      
-        # l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
-
-
-        # loss = ( l_total * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) / (2* batch_size)
-        loss = ( l_total * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) + 0. * sum(p.sum() for p in self.net_g.parameters())
-        loss.backward()
+        else : 
+            l_total = l_total + 0. * sum(p.sum() for p in self.net_g.parameters())
+            l_total.backward()
 
 
-        
-        
 
         use_grad_clip = self.opt['train'].get('use_grad_clip', True)
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
-        self.optimizer_g.step()
-        # self.optimizer_g_filter.step()
 
+        
+        self.optimizer_g.step()
 
 
         # self.optimizer_g.zero_grad()
@@ -551,17 +520,20 @@ class ImageRestorationModel(BaseModel):
         elif self.test_mode == 'adv':
             self.lq = self.pgd_attack(self.net_g, self.gt, self.gt)
         elif self.test_mode =='seen_noise':
+  
             B,C,H,W = self.lq.size()
-            # rand_value = torch.rand(1)*20 + 5
-            # rand_value = rand_value.cuda()
             random_noise = torch.randn(B,C,H,W).cuda()
-            self.lq = torch.clamp(self.gt+ random_noise*(15/255), 0, 1)
+            sigma = (torch.rand(B) * 55) * 1./255
+            sigma = sigma.cuda()
+            noise = random_noise * sigma.view(-1,1,1,1)
+            noise = noise.cuda()
+            self.lq = torch.clamp(self.gt+ noise, 0, 1)
             # random_noise = torch.randn(B,C,H,W).cuda()
             # self.lq = torch.clamp(self.lq+ random_noise*0.2, 0, 1)
         elif self.test_mode =='unseen_noise':
             B,C,H,W = self.lq.size()
             random_noise = torch.randn(B,C,H,W).cuda()
-            self.lq = torch.clamp(self.gt+ random_noise*(50/255), 0, 1)
+            self.lq = torch.clamp(self.gt+ random_noise*(90/255), 0, 1)
 
         self.net_g.eval()
         with torch.no_grad():
