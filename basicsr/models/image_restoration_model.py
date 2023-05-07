@@ -380,7 +380,8 @@ class ImageRestorationModel(BaseModel):
             adv, noise = self.obsattack()
 
         self.optimizer_g.zero_grad()
-        # self.optimizer_g_filter.zero_grad()
+        self.optimizer_g_filter.zero_grad()
+
         if self.opt['train'].get('mixup', False):
             self.mixup_aug()
 
@@ -426,6 +427,10 @@ class ImageRestorationModel(BaseModel):
 
         
         self.optimizer_g.step()
+        
+        if current_iter % 10 == 0:
+            if self.opt['train']['filter']:
+                self.optimizer_g_filter.step()
 
 
         # self.optimizer_g.zero_grad()
