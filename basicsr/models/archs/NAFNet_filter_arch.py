@@ -180,7 +180,7 @@ class Adaptive_freqfilter_classification(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
         self.relu = nn.ReLU()
         self.sig = nn.Sigmoid()
-        self.soft = nn.Softmax(dim=0)
+        self.soft = nn.Softmax(dim=1)
         self.temp = torch.tensor(1)
         
 
@@ -192,6 +192,7 @@ class Adaptive_freqfilter_classification(nn.Module):
         # self.radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
 
         self.radius_factor_set = torch.tensor([0.3, 0.5, 0.7, 1.0]).cuda()
+        self.value_num = 4
 
 
     def forward(self, x):
@@ -232,27 +233,32 @@ class Adaptive_freqfilter_classification(nn.Module):
         value_set =  self.sig(self.fclayer_v2(self.fclayer_v1(y)))
         # value_set =  self.relu(self.fclayer_v2(self.fclayer_v1(y)))
         # value_set =  self.fclayer_v2(self.fclayer_v1(y))
-        value_set = torch.mean(value_set, dim=0)
+        # value_set = torch.mean(value_set, dim=0)
         # print(value_set)
         value_set = value_set / self.temp
         value_set = self.soft(value_set)
-        value_set = value_set[:4]
+        value_set = value_set[:, :self.value_num]
         # print(value_set)
-     
+        # value_set_hw = value_set
         
         radius_set = max_radius*self.radius_factor_set
 
         # mask = [torch.sigmoid(radius_set[0].to(x.device) - dist.to(x.device)) * value_set_sum[0]]
         mask = []
-        for i in range(4):
-            mask.append(torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) * value_set[i])
+        for i in range(self.value_num):
+            mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device))))
         
-        fq_mask = torch.sum(torch.stack(mask, dim=0), dim=0)
+        # print(mask.shape)
+        fq_mask_set = torch.stack(mask, dim=0)
+        # fq_mask = torch.mul(value_set.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, H, W), fq_mask_set.unsqueeze(0).expand(B, -1, -1, -1))
+        fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
    
+        fq_mask = torch.sum(fq_mask, dim=1)
 
         # x = torch.fft.fftn(x, dim=(-1,-2))
         # x = torch.fft.fftshift(x)
-        lowpass = (x*fq_mask)
+        # lowpass = (x*fq_mask)
+        lowpass = (x*fq_mask.unsqueeze(1))
 
         lowpass = torch.fft.ifftshift(lowpass)
 
@@ -260,8 +266,8 @@ class Adaptive_freqfilter_classification(nn.Module):
 
         lowpass = torch.abs(lowpass)
         # lowpass = lowpass.real
-
-        return lowpass, fq_mask, self.radius_factor_set, value_set, x_fq
+        
+        return lowpass,  value_set
 
 
 class Lowpassfilter(nn.Module):
@@ -420,7 +426,7 @@ class Fix_lowpassfilter(nn.Module):
 
         return lowpass, mask
 
-class NAFNet(nn.Module):
+class NAFNet_filter(nn.Module):
 
     def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
         super().__init__()
@@ -436,7 +442,7 @@ class NAFNet(nn.Module):
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
         self.filter = Adaptive_freqfilter_classification()
-        self.filter = Lowpassfilter()
+        # self.filter = Lowpassfilter()
         # self.filter = Adaptive_freqfilter_regression()
         # self.filter = Lowpassfilter()
         self.mask = {}
@@ -508,10 +514,10 @@ class NAFNet(nn.Module):
         x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
         return x
 
-class NAFNetLocal(Local_Base, NAFNet):
+class NAFNetLocal(Local_Base, NAFNet_filter):
     def __init__(self, *args, train_size=(1, 3, 256, 256), fast_imp=False, **kwargs):
         Local_Base.__init__(self)
-        NAFNet.__init__(self, *args, **kwargs)
+        NAFNet_filter.__init__(self, *args, **kwargs)
 
         N, C, H, W = train_size
         base_size = (int(H * 1.5), int(W * 1.5))
@@ -553,7 +559,7 @@ if __name__ == '__main__':
     # middle_blk_num = 1
     # dec_blks = [1, 1, 1, 1]
     
-    net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
+    net = NAFNet_filter(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                       enc_blk_nums=enc_blks, dec_blk_nums=dec_blks)
 
   
