@@ -432,6 +432,12 @@ class ImageRestorationModel(BaseModel):
             if self.opt['train']['filter']:
                 self.optimizer_g_filter.step()
 
+        if current_iter % 100 == 0:
+            if self.opt['train']['filter']:
+                for name, module in self.net_g.named_modules():
+                    if name == 'module.filter':
+                        x, v_set = module.feature_map
+                print(v_set)
 
         # self.optimizer_g.zero_grad()
         # self.optimizer_g_filter.zero_grad()
