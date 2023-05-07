@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet16-small-0-55-train
+name: NAFNet16-small-0-55-train-adv-filter
 model_type: ImageRestorationModel
 scale: 1
 num_gpu: 2
@@ -43,7 +43,7 @@ datasets:
 
 
 network_g:
-  type: NAFNet
+  type: NAFNet_filter
   width: 16
   enc_blk_nums: [2, 2, 2, 2]
   middle_blk_num: 2
@@ -86,7 +86,8 @@ train:
     loss_weight: 1
     reduction: mean
 
-  adv: false
+  adv: true
+  alpha: 0.5
 
 # validation settings
 val:

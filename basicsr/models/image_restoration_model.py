@@ -51,7 +51,7 @@ class ImageRestorationModel(BaseModel):
         self.prune_rate = 0
         self.test_mode = 'ori'
 
-        self.alpha = 2.
+        self.alpha = self.opt['train']['alpha']
         eps = 5
         patch_size=50
         l2_adv_tr = eps*1./255 * math.sqrt(patch_size ** 2)
@@ -88,7 +88,14 @@ class ImageRestorationModel(BaseModel):
    
 
 
+    def get_radius_set(self):
+        radius_set = {}
 
+        for k, v in self.net_g.named_parameters():
+            if 'filter' in k :
+                radius_set[k] = v.data.item()
+
+        return  radius_set
 
 
     def init_training_settings(self):
@@ -131,6 +138,11 @@ class ImageRestorationModel(BaseModel):
             else : 
                 if v.requires_grad:
                     optim_params.append(v)
+
+        # for k, v in self.net_g.named_parameters():
+        #     if v.requires_grad:
+        #         optim_params.append(v)
+  
    
 
         optim_type = train_opt['optim_g'].pop('type')
