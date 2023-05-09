@@ -29,7 +29,7 @@ class Adaptive_freqfilter_regression(nn.Module):
         super().__init__()
 
         # self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        self.conv1 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
         self.down1 = nn.Conv2d(16, 32, 2, 2, bias=True)
                                
         self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1, stride=1, groups=1,bias=True)
@@ -45,17 +45,19 @@ class Adaptive_freqfilter_regression(nn.Module):
         self.relu = nn.ReLU()
         self.sig = nn.Sigmoid()
         self.soft = nn.Softmax(dim=0)
+        # reg4 setting
+        self.radius_factor_set = torch.tensor([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.85, 1.0]).cuda()
+        # self.radius_factor_set = torch.tensor([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8 , 0.85, 0.9, 0.95, 1.0]).cuda()
         
-
-        self.fclayer_r1 = nn.Linear(256, 512)
-        self.fclayer_r2 = nn.Linear(512, 10)
+        # self.fclayer_r1 = nn.Linear(256, 512)
+        # self.fclayer_r2 = nn.Linear(512, 20)
         self.fclayer_v1 = nn.Linear(256, 512)
-        self.fclayer_v2 = nn.Linear(512, 10)
+        self.fclayer_v2 = nn.Linear(512, len(self.radius_factor_set))
+        self.leaky_relu = nn.LeakyReLU()
 
         # self.multset = torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6 ,1.8, 2.0]).cuda()
-        self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
-
-
+        # self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
+        
     def forward(self, x):
         B, C, H, W = x.size()
         inp = x
@@ -73,7 +75,8 @@ class Adaptive_freqfilter_regression(nn.Module):
         x_mag = torch.abs(x)
         # x_mag_max = torch.max(x_mag)
         # x_fq = x_mag / x_mag_max
-        y = self.conv1(x_mag)
+        filter_input = torch.cat((inp,x_mag), dim=1)
+        y = self.conv1(filter_input)
         y = self.relu(y)
         y = self.down1(y)
         y = self.conv2(y)
@@ -92,76 +95,55 @@ class Adaptive_freqfilter_regression(nn.Module):
 
         # print(y.size())
 
-        radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
-        value_set =  self.sig(self.fclayer_v2(self.fclayer_v1(y)))
-        radius_factor_set = torch.mean(radius_factor_set, dim=0)
-        for i in range(1, len(radius_factor_set)):
-            radius_factor_set[i] += radius_factor_set[i-1]
-        value_set = torch.mean(value_set, dim=0)
+        # radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
+        value_set =  self.leaky_relu(self.fclayer_v2(self.fclayer_v1(y)))
+        radius_set = max_radius*self.radius_factor_set
+        # radius_factor_set = torch.mean(radius_factor_set, dim=0)
+        # for i in range(1, len(radius_factor_set)):
+        #     radius_factor_set[i] += radius_factor_set[i-1]
+        # value_set = torch.mean(value_set, dim=0)
 
-        # radius_factor_set = radius_factor_set.reshape(10, 10)
-        # print('ori : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # print('soft : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # print('soft : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # radius_factor_set = self.soft(radius_factor_set)
-
-        # print('ori : ',radius_factor_set)
-        # radius_factor_set = radius_factor_set * self.multset
-        # print('multi :', radius_factor_set)
-        # radius_factor_set = radius_factor_set.sum(-1)
-        # print('sum :', radius_factor_set)
-        
-
-
-        # value_set= value_set.view(10, 10)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = self.soft(value_set)
-
-        # print('ori : ',value_set[0])
-        # value_set = value_set * self.multset
-        # print('multi :', value_set[0])
-        # value_set = value_set.sum(-1)
-        # print('sum :', value_set[0])
-      
-        
-
-        # print('radius set : ', radius_factor_set, 'value set : ', value_set)
-        # print(radius_factor_set.grad)
-        # print(radius_set.size(), dist.size())
-
-        radius_set = max_radius*radius_factor_set
         mask = []
-        zero = torch.tensor(0.0, dtype=torch.float32).cuda()
-        fq_mask = torch.zeros_like(dist).cuda()
-        for i in range(len(radius_set)):
+        for i in range(len(self.radius_factor_set)):
             if i == 0:
-                # mask.append(torch.where((dist < radius_set[i]), value_set[i], zero))
-                fq_mask = torch.where((dist < radius_set[i]), value_set[i], fq_mask)
-                # mask.append(torch.sigmoid(radius_set[i] - dist) * value_set[i])
-            else :
-                # mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], zero))
-                fq_mask = torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], fq_mask)
-                # mask.append((torch.sigmoid(radius_set[i] - dist) - torch.sigmoid(radius_set[i-1] - dist)) * value_set[i])
+                mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device))))
+            else : 
+                mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) -  torch.sigmoid(radius_set[i-1].to(x.device) - dist.to(x.device))))
+        # print(mask.shape)
+        fq_mask_set = torch.stack(mask, dim=0)
+        # fq_mask = torch.mul(value_set.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, H, W), fq_mask_set.unsqueeze(0).expand(B, -1, -1, -1))
+        
+        # value_set [B, 20, 1, 1], fq_mask_set [1, 20, H, W]
+        fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
+        fq_mask = torch.sum(fq_mask, dim=1)
+        
+
+        # radius_set = max_radius*radius_factor_set
+        # mask = []
+        # zero = torch.tensor(0.0, dtype=torch.float32).cuda()
+        # fq_mask = torch.zeros_like(dist).cuda()
+        # for i in range(len(radius_set)):
+        #     if i == 0:
+        #         # mask.append(torch.where((dist < radius_set[i]), value_set[i], zero))
+        #         fq_mask = torch.where((dist < radius_set[i]), value_set[i], fq_mask)
+        #         # mask.append(torch.sigmoid(radius_set[i] - dist) * value_set[i])
+        #     else :
+        #         # mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], zero))
+        #         fq_mask = torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], fq_mask)
+        #         # mask.append((torch.sigmoid(radius_set[i] - dist) - torch.sigmoid(radius_set[i-1] - dist)) * value_set[i])
         
 
 
-        lowpass = (x*fq_mask)
+        lowpass = (x*fq_mask.unsqueeze(1))
 
         lowpass = torch.fft.ifftshift(lowpass)
 
         lowpass = torch.fft.ifftn(lowpass, dim=(-1,-2))
 
-        lowpass = torch.abs(lowpass)
-        # lowpass = lowpass.real
+        # lowpass = torch.abs(lowpass)
+        lowpass = lowpass.real
 
-        return lowpass, fq_mask, radius_factor_set, value_set, x_mag
+        return lowpass, fq_mask, value_set
 
 class Adaptive_freqfilter_classification(nn.Module):
     def __init__(self):
@@ -441,9 +423,9 @@ class NAFNet_filter(nn.Module):
         self.middle_blks = nn.ModuleList()
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
-        self.filter = Adaptive_freqfilter_classification()
+        # self.filter = Adaptive_freqfilter_classification()
         # self.filter = Lowpassfilter()
-        # self.filter = Adaptive_freqfilter_regression()
+        self.filter = Adaptive_freqfilter_regression()
         # self.filter = Lowpassfilter()
         self.mask = {}
 

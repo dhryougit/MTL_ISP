@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet16-small-0-55-train-adv-filter-classify
+name: NAFNet16-small-0-55-train-pgd-adv-filter-reg4
 # name: xx/
 model_type: ImageRestorationModel
 scale: 1
@@ -30,7 +30,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 2
+    batch_size_per_gpu: 32
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -57,8 +57,8 @@ path:
   # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-SIDD-width16-5-to-25-filter/models/net_g_60000.pth
   strict_load_g: false
   resume_state: ~
-  # root: '/131_data/dhryou/NAFNet'
-  root: '/Frequency_Filtering'
+  root: '/131_data/dhryou/NAFNet'
+  # root: '/Frequency_Filtering'
 
 # training settings
 train:
@@ -89,7 +89,7 @@ train:
     reduction: mean
 
   adv: true
-  alpha: 0.5
+  alpha: 1.0
   filter: true
 
 # validation settings
@@ -115,7 +115,7 @@ logger:
   use_tb_logger: false
   wandb:
     # project: test-project
-    project: xx
+    project: Robust
     resume_id: ~
 
 # dist training settings
