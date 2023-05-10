@@ -50,22 +50,18 @@ class Adaptive_freqfilter_regression(nn.Module):
         # self.radius_factor_set = torch.tensor([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.85, 1.0]).cuda()
         # self.radius_factor_set = torch.tensor([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8 , 0.85, 0.9, 0.95, 1.0]).cuda()
         
-        # self.fclayer_r1 = nn.Linear(256, 512)
-        # self.fclayer_r2 = nn.Linear(512, 20)
+  
         self.fclayer_v1 = nn.Linear(256, 512)
         self.fclayer_v2 = nn.Linear(512, len(self.radius_factor_set))
         self.leaky_relu = nn.LeakyReLU()
 
-        # self.multset = torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6 ,1.8, 2.0]).cuda()
-        # self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
-        
+   
     def forward(self, x):
         B, C, H, W = x.size()
         inp = x
 
         a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
         dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
-        # dist = dist.repeat(B, 1, 1).to(x.device)
         dist = dist.to(x.device)
         max_radius = math.sqrt(H*H+W*W)/2
 
@@ -99,10 +95,7 @@ class Adaptive_freqfilter_regression(nn.Module):
         # radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
         value_set =  self.leaky_relu(self.fclayer_v2(self.fclayer_v1(y)))
         radius_set = max_radius*self.radius_factor_set
-        # radius_factor_set = torch.mean(radius_factor_set, dim=0)
-        # for i in range(1, len(radius_factor_set)):
-        #     radius_factor_set[i] += radius_factor_set[i-1]
-        # value_set = torch.mean(value_set, dim=0)
+
 
         mask = []
         for i in range(len(self.radius_factor_set)):
@@ -112,26 +105,10 @@ class Adaptive_freqfilter_regression(nn.Module):
                 mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) -  torch.sigmoid(radius_set[i-1].to(x.device) - dist.to(x.device))))
         # print(mask.shape)
         fq_mask_set = torch.stack(mask, dim=0)
-        # fq_mask = torch.mul(value_set.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, H, W), fq_mask_set.unsqueeze(0).expand(B, -1, -1, -1))
-        
+      
         # value_set [B, 20, 1, 1], fq_mask_set [1, 20, H, W]
         fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
         fq_mask = torch.sum(fq_mask, dim=1)
-        
-
-        # radius_set = max_radius*radius_factor_set
-        # mask = []
-        # zero = torch.tensor(0.0, dtype=torch.float32).cuda()
-        # fq_mask = torch.zeros_like(dist).cuda()
-        # for i in range(len(radius_set)):
-        #     if i == 0:
-        #         # mask.append(torch.where((dist < radius_set[i]), value_set[i], zero))
-        #         fq_mask = torch.where((dist < radius_set[i]), value_set[i], fq_mask)
-        #         # mask.append(torch.sigmoid(radius_set[i] - dist) * value_set[i])
-        #     else :
-        #         # mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], zero))
-        #         fq_mask = torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], fq_mask)
-        #         # mask.append((torch.sigmoid(radius_set[i] - dist) - torch.sigmoid(radius_set[i-1] - dist)) * value_set[i])
         
 
 
@@ -473,7 +450,9 @@ class NAFNet_filter(nn.Module):
             filtered = torch.cat((inp,x), dim=1)
             x = self.intro(filtered)
         else : 
-            x = self.intro(inp)
+            dummy = torch.zeros_like(inp).cuda()
+            x = torch.cat((inp,dummy), dim=1)
+            x = self.intro(x)
 
         encs = []
 
