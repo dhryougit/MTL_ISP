@@ -46,7 +46,8 @@ class Adaptive_freqfilter_regression(nn.Module):
         self.sig = nn.Sigmoid()
         self.soft = nn.Softmax(dim=0)
         # reg4 setting
-        self.radius_factor_set = torch.tensor([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.85, 1.0]).cuda()
+        self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
+        # self.radius_factor_set = torch.tensor([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.85, 1.0]).cuda()
         # self.radius_factor_set = torch.tensor([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8 , 0.85, 0.9, 0.95, 1.0]).cuda()
         
         # self.fclayer_r1 = nn.Linear(256, 512)
@@ -413,7 +414,7 @@ class NAFNet_filter(nn.Module):
     def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
         super().__init__()
 
-        self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
+        self.intro = nn.Conv2d(in_channels=6, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
                               bias=True)
         self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
                               bias=True)
@@ -469,7 +470,8 @@ class NAFNet_filter(nn.Module):
 
         if mode == 'on':
             x = self.filter(inp)[0]
-            x = self.intro(x)
+            filtered = torch.cat((inp,x), dim=1)
+            x = self.intro(filtered)
         else : 
             x = self.intro(inp)
 
