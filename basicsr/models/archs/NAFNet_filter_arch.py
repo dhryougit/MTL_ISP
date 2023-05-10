@@ -462,13 +462,16 @@ class NAFNet_filter(nn.Module):
 
         self.padder_size = 2 ** len(self.encoders)
 
-    def forward(self, inp):
+    def forward(self, inp, mode='on'):
         B, C, H, W = inp.shape
         inp = self.check_image_size(inp)
         # x = self.intro(inp)
 
-        x = self.filter(inp)[0]
-        x = self.intro(x)
+        if mode == 'on':
+            x = self.filter(inp)[0]
+            x = self.intro(x)
+        else : 
+            x = self.intro(inp)
 
         encs = []
 
