@@ -490,13 +490,13 @@ class ImageRestorationModel(BaseModel):
                 print(v_set)
         
         B,C,H,W = self.lq.size()
-        if (current_iter/200) % 3 == 0:
+        if int(current_iter/200) % 3 == 0:
             self.filter_on = 'off'
         else:
             self.filter_on = 'on'
         
         
-        if (current_iter/200) % 3 == 1:
+        if int(current_iter/200) % 3 == 1:
             noise = self.genearte_poisson_noise()
         else :
             noise = self.genearte_gaussian_noise()
@@ -505,7 +505,7 @@ class ImageRestorationModel(BaseModel):
         self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
 
         if self.opt['train']['adv']:
-            if (current_iter/200) % 3 == 1:
+            if int(current_iter/200) % 3 == 1:
                 adv, noise = self.obsattack()
             else:
                 adv = self.pgd_attack(self.net_g, self.lq, self.gt)
@@ -527,10 +527,10 @@ class ImageRestorationModel(BaseModel):
         l_pix += self.cri_pix(preds, self.gt)
      
         loss_dict = OrderedDict()
-        if (current_iter/200) % 3 == 1:
+        if int(current_iter/200) % 3 == 1:
             loss_dict['l_poisson_0_55'] = l_pix
         else:
-            loss_dict['l_gaussain_0_55'] = l_pix
+            loss_dict['l_gaussian_0_55'] = l_pix
 
 
 
@@ -560,9 +560,9 @@ class ImageRestorationModel(BaseModel):
 
         
  
-        if (current_iter/200) % 3 == 0:
+        if int(current_iter/200) % 3 == 0:
             self.optimizer_g.step()
-        elif (current_iter/200) % 3 == 1:
+        elif int(current_iter/200) % 3 == 1:
             self.optimizer_g_filter.step()
         else:
             self.optimizer_g.step()
