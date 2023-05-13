@@ -37,109 +37,71 @@ def forward_hook(module, input, output):
     module.feature_map = output
 
 
-class PassFilter(nn.Module):
+
+
+class Random_frequency_replacing(nn.Module):
     def __init__(self):
         super().__init__()
 
-        # self.radius1 = nn.Parameter(torch.tensor(0.1))
-        # self.radius1_val = nn.Parameter(torch.tensor(1.0))
+   
+        self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
 
-
-        # self.radius2 = nn.Parameter(torch.tensor(0.3))
-        # self.radius2_val = nn.Parameter(torch.tensor(1.0))
-
-        # self.radius3 = nn.Parameter(torch.tensor(0.5))
-        # self.radius3_val = nn.Parameter(torch.tensor(1.0))
-
-        # self.radius4 = nn.Parameter(torch.tensor(0.7))
-        # self.radius4_val = nn.Parameter(torch.tensor(1.0))
-
-        # self.radius5 = nn.Parameter(torch.tensor(0.9))
-        # self.radius5_val = nn.Parameter(torch.tensor(0.6))
-
-        # self.radius6 = nn.Parameter(torch.tensor(1.1))
-        # self.radius6_val = nn.Parameter(torch.tensor(0.4))
-
-        # self.radius7 = nn.Parameter(torch.tensor(1.3))
-        # self.radius7_val = nn.Parameter(torch.tensor(0.2))
-
-        # self.radius8 = nn.Parameter(torch.tensor(1.5))
-        # self.radius8_val = nn.Parameter(torch.tensor(0.))
-
-        # trained
-        self.radius1 = nn.Parameter(torch.tensor(0.1))
-        self.radius1_val = nn.Parameter(torch.tensor(0.0))
-        
-        self.radius2 = nn.Parameter(torch.tensor(0.17))
-        self.radius2_val = nn.Parameter(torch.tensor(2.0))
-        
-        self.radius3 = nn.Parameter(torch.tensor(0.25))
-        self.radius3_val = nn.Parameter(torch.tensor(2.0))
-
-        self.radius4 = nn.Parameter(torch.tensor(0.5))
-        self.radius4_val = nn.Parameter(torch.tensor(2.0))
-
-        self.radius5 = nn.Parameter(torch.tensor(0.6))
-        self.radius5_val = nn.Parameter(torch.tensor(2.0))
-
-        self.radius6 = nn.Parameter(torch.tensor(0.7))
-        self.radius6_val = nn.Parameter(torch.tensor(2.0))
-        
-        self.radius7 = nn.Parameter(torch.tensor(0.9))
-        self.radius7_val = nn.Parameter(torch.tensor(2.0))
-
-        self.radius8 = nn.Parameter(torch.tensor(1.0))
-        self.radius8_val = nn.Parameter(torch.tensor(2.0))
-
-
-
-
-    def forward(self, x):
-        B, C, H, W = x.size()
-        inp = x
+   
+    def forward(self, clean, noisy):
+        B, C, H, W = noisy.size()
+        inp = noisy
 
         a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
         dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
-        
-        # radius = math.sqrt(H*H+W*W)/self.alpha
-        radius1 = (math.sqrt(H*H+W*W)/2)*self.radius1
-        radius2 = (math.sqrt(H*H+W*W)/2)*self.radius2
-        radius3 = (math.sqrt(H*H+W*W)/2)*self.radius3
-        radius4 = (math.sqrt(H*H+W*W)/2)*self.radius4
-        radius5 = (math.sqrt(H*H+W*W)/2)*self.radius5
-        radius6 = (math.sqrt(H*H+W*W)/2)*self.radius6
-        radius7 = (math.sqrt(H*H+W*W)/2)*self.radius7
-        radius8 = (math.sqrt(H*H+W*W)/2)*self.radius8
-        # mask = dist < radius.to(dist.device)
-        mask1 = torch.sigmoid(radius1.to(x.device) - dist.to(x.device)) * self.radius1_val
-        mask2 = (torch.sigmoid(radius2.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius1.to(x.device) - dist.to(x.device))) * self.radius2_val
-        mask3 = (torch.sigmoid(radius3.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius2.to(x.device) - dist.to(x.device))) * self.radius3_val
-        mask4 = (torch.sigmoid(radius4.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius3.to(x.device) - dist.to(x.device))) * self.radius4_val
-        mask5 = (torch.sigmoid(radius5.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius4.to(x.device) - dist.to(x.device))) * self.radius5_val
-        mask6 = (torch.sigmoid(radius6.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius5.to(x.device) - dist.to(x.device))) * self.radius6_val
-        mask7 = (torch.sigmoid(radius7.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius6.to(x.device) - dist.to(x.device))) * self.radius7_val
-        mask8 = (torch.sigmoid(radius8.to(x.device) - dist.to(x.device)) - torch.sigmoid(radius7.to(x.device) - dist.to(x.device))) * self.radius8_val
+        dist = dist.to(noisy.device)
+        max_radius = math.sqrt(H*H+W*W)/2
 
-        # mask = torch.clamp(mask1+mask2+mask3+mask4+mask5+mask6+mask7+mask8, 0, 1)
-        mask = mask1+mask2+mask3+mask4+mask5+mask6+mask7+mask8
+       
+        noisy_fq = torch.fft.fftn(noisy, dim=(-1,-2))
+        noisy_fq = torch.fft.fftshift(noisy_fq)
+        clean_fq = torch.fft.fftn(clean, dim=(-1,-2))
+        clean_fq = torch.fft.fftshift(clean_fq)
 
 
-        lpf = mask.to(torch.float32).to(x.device)
-   
-        x = torch.fft.fftn(x, dim=(-1,-2))
-        x = torch.fft.fftshift(x)
+       
+        radius_set = max_radius*self.radius_factor_set
+        value_set =  torch.bernoulli(torch.ones(B,len(self.radius_factor_set))*0.16).cuda()
+       
 
-        lowpass = (x*lpf)
+        mask = []
+        # zero = torch.tensor(0.0, dtype=torch.float32).cuda()
+        zero_mask = torch.zeros_like(dist).cuda()
+        one_mask = torch.ones_like(dist).cuda()
+        for i in range(len(radius_set)):
+            if i == 0:
+                mask.append(torch.where((dist < radius_set[i]), one_mask, zero_mask))
+            else :
+                mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), one_mask, zero_mask))
+           
 
-        lowpass = torch.fft.ifftshift(lowpass)
+        fq_mask_set = torch.stack(mask, dim=0)
+        fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
+        fq_mask = torch.sum(fq_mask, dim=1)
+        # print(fq_mask[0])
+    
+        # fq_mask [B,H,W]
+        bn1_mask = fq_mask
+        bn2_mask = torch.ones_like(bn1_mask)-bn1_mask
 
-        lowpass = torch.fft.ifftn(lowpass, dim=(-1,-2))
 
-        # lowpass = torch.abs(lowpass)
+        noisy_fq = (noisy_fq*bn1_mask.unsqueeze(1))
+        clean_fq = (clean_fq*bn2_mask.unsqueeze(1))
 
-        lowpass = lowpass.real
+        replaced_fq = noisy_fq+clean_fq
+        replaced_fq = torch.fft.ifftshift(replaced_fq)
 
-        return lowpass
+        replaced_fq = torch.fft.ifftn(replaced_fq, dim=(-1,-2))
+
+        replaced_fq = replaced_fq.real
+        # lowpass = torch.clamp(lowpass.real, 0 , 1)
+
+
+        return replaced_fq
 
 
 class ImageRestorationModel(BaseModel):
@@ -153,7 +115,9 @@ class ImageRestorationModel(BaseModel):
         self.net_g = self.model_to_device(self.net_g)
         self.prune_rate = 0
         self.test_mode = 'ori'
-        self.passfilter = PassFilter()
+        self.passfilter = Random_frequency_replacing()
+        self.filter_on = 'on'
+        
 
         self.alpha = self.opt['train']['alpha']
         eps = 5
@@ -187,7 +151,7 @@ class ImageRestorationModel(BaseModel):
             if name == 'module.filter':
                 module.register_forward_hook(forward_hook)
 
-
+     
 
    
 
@@ -414,7 +378,7 @@ class ImageRestorationModel(BaseModel):
 
     def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.03, num_iter=1):
     # def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.01, num_iter=40):
-     
+        B,C,H,W = x.size()
         x_pgd = x.clone().detach()
 
         # PGD attack loop
@@ -422,9 +386,9 @@ class ImageRestorationModel(BaseModel):
             # Forward pass to compute the model's output and loss
             x_pgd.requires_grad = True
             
-            output = model(x_pgd, 'off')
+            output = model(x_pgd)
 
-            loss = self.cri_pix(output, y)
+            loss = self.cri_pix(output, y) + 0. * sum(p.sum() for p in model.parameters())
  
             # Backward pass to compute the gradient of the loss w.r.t. the input
             model.zero_grad()
@@ -432,12 +396,23 @@ class ImageRestorationModel(BaseModel):
             loss.backward()
             # grad = torch.clamp(x_pgd.grad, -(25/255), 25/255)
             grad = x_pgd.grad
+
+        
+            # alpha = (torch.rand(B) * 16) * 1./255
+            # alpha = alpha.cuda()
+         
+    
             
             # Add perturbation to the input
             with torch.no_grad():
+                # pgd_grad_mean = torch.sign(grad).mean(dim=(2,3), keepdim=True)
+                # pgd_grad = torch.sign(grad)-pgd_grad_mean
+
+                # x_gpd = x_pgd + torch.sign(grad) * alpha.view(-1,1,1,1)
                 x_pgd = x_pgd + alpha * torch.sign(grad)
                 x_pgd = torch.min(torch.max(x_pgd, x - epsilon), x + epsilon)
-                x_pgd = torch.clamp(x_pgd + grad, 0, 1)
+                x_pgd = torch.clamp(x_pgd, 0, 1)
+                # x_pgd = torch.clamp(x_pgd + grad, 0, 1)
             
         
         return x_pgd.detach()
@@ -454,12 +429,7 @@ class ImageRestorationModel(BaseModel):
     def obsattack(self):
         self.net_g.eval()
         self.set_requires_grad([self.net_g], False)
-        # B,C,H,W = self.gt.size()
-        # random_noise = torch.randn(B,C,H,W).cuda()
-        # # random gaussian form 0 to 55
-        # rand_value = torch.rand(1)*55
-        # rand_value = rand_value.cuda()
-        # noise = torch.clamp(self.gt+ random_noise*(rand_value/255), 0, 1)
+
         noise = self.lq
         data_adv = self.adversary.perturb(noise, self.gt)
 
@@ -468,20 +438,33 @@ class ImageRestorationModel(BaseModel):
 
         return data_adv, noise
         
+    def genearte_poisson_noise(self):
+        B,C,H,W = self.lq.size()
+        sigma = (torch.rand(B) * 55) * 1./255
+        sigma = sigma.cuda()
+        noise = torch.from_numpy(np.random.poisson(lam=1, size=(B,C,H, W))).float().cuda()
+        noise = (noise - noise.mean()) / noise.std() * sigma.view(-1,1,1,1)
+        return noise
+
+    def genearte_gaussian_noise(self):
+        B,C,H,W = self.lq.size()
+        sigma = (torch.rand(B) * 55) * 1./255
+        sigma = sigma.cuda()
+        random_noise = torch.randn(B,C,H,W).cuda()
+        noise = random_noise * sigma.view(-1,1,1,1)
+        return noise
 
 
     def optimize_parameters(self, current_iter, tb_logger):
-        if current_iter == 1:
-            if self.opt['train']['filter']:
-                for name, module in self.net_g.named_modules():
-                    if name == 'module.filter':
-                        x, mask, v_set = module.feature_map
-                print(v_set)
-        
-        B,C,H,W = self.lq.size()
         
      
-            # adv, noise = self.obsattack()
+
+
+        noise = self.genearte_gaussian_noise()
+        self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+
+        if self.opt['train']['adv']:
+            adv = self.pgd_attack(self.net_g, self.lq, self.gt)
 
         self.optimizer_g.zero_grad()
         self.optimizer_g_filter.zero_grad()
@@ -491,32 +474,121 @@ class ImageRestorationModel(BaseModel):
 
         preds = self.net_g(self.lq)
 
-
         l_pix = 0.
         l_pix += self.cri_pix(preds, self.gt)
-    
+
+        fq_replaced = self.passfilter(preds, self.lq)
+        fq_replaced_preds = self.net_g(fq_replaced)
+        l_pix_replaced = 0.
+        l_pix_replaced += self.cri_pix(fq_replaced_preds, self.gt)
+            
         loss_dict = OrderedDict()
-        loss_dict['l_sidd'] = l_pix
-       
+        loss_dict['l_gaussian_0_55'] = l_pix
+        loss_dict['l_gaussian_0_55_replaced'] = l_pix_replaced
+
+        if self.opt['train']['adv']:
+            l_adv = 0.
+            adv_preds = self.net_g(adv)
+
+            l_adv += self.cri_pix(adv_preds, preds)
+
+            fq_replaced = self.passfilter(adv_preds, adv)
+            fq_replaced_preds = self.net_g(fq_replaced)
+            l_adv_replaced = 0.
+            l_adv_replaced += self.cri_pix(fq_replaced_preds, preds)
+                
+            loss_dict['l_adv'] = l_adv
+            loss_dict['l_adv_replaced'] = l_adv_replaced
+
+            loss_ori = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
+            loss_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) )
+            loss_total = 0.9*loss_ori + 0.1*loss_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
+            loss_total.backward()
+        else :
+            l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
+
+
 
         use_grad_clip = self.opt['train'].get('use_grad_clip', True)
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
-            
-        l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
-        l_total.backward()
         self.optimizer_g.step()
         self.optimizer_g_filter.step()
-        
 
-        if self.opt['train']['filter']:
-            if current_iter % 100 == 0:
+
+
+        if (current_iter-1) % 200 == 0:
+            if self.opt['train']['filter']:
                 for name, module in self.net_g.named_modules():
                     if name == 'module.filter':
                         x, mask, v_set = module.feature_map
-                print(v_set[0])
+                if v_set != None:
+                    print(v_set[0])
 
-      
+        # self.optimizer_g.zero_grad()
+        # self.optimizer_g_filter.zero_grad()
+
+        # mask, v_set = self.passfilter(self.gt)
+        
+        # filtered_lq = torch.fft.fftn(self.lq, dim=(-1,-2))
+        # filtered_lq = torch.fft.fftshift(filtered_lq)
+        # filtered_lq = (filtered_lq*mask.unsqueeze(1))
+        # filtered_lq = torch.fft.ifftshift(filtered_lq)
+        # filtered_lq = torch.fft.ifftn(filtered_lq, dim=(-1,-2))
+        # filtered_lq = torch.clamp(filtered_lq.real, 0 , 1)
+
+
+        # filtered_gt = torch.fft.fftn(self.gt, dim=(-1,-2))
+        # filtered_gt = torch.fft.fftshift(filtered_gt)        
+        # filtered_gt = (filtered_gt*mask.unsqueeze(1))
+        # filtered_gt = torch.fft.ifftshift(filtered_gt)
+        # filtered_gt = torch.fft.ifftn(filtered_gt, dim=(-1,-2))
+        # filtered_gt = torch.clamp(filtered_gt.real, 0 , 1)
+
+
+        # filtered_adv = torch.fft.fftn(adv, dim=(-1,-2))
+        # filtered_adv = torch.fft.fftshift(filtered_adv)        
+        # filtered_adv = (filtered_adv*mask.unsqueeze(1))
+        # filtered_adv = torch.fft.ifftshift(filtered_adv)
+        # filtered_adv = torch.fft.ifftn(filtered_adv, dim=(-1,-2))
+        # filtered_adv = torch.clamp(filtered_adv.real, 0 , 1)
+
+        
+
+
+        # preds = self.net_g(filtered_lq)
+    
+   
+        # l_pix_filter = 0.
+        # l_pix_filter += self.cri_pix(preds, filtered_gt)
+       
+
+        # loss_dict['l_gaussian_0_55_filter'] = l_pix_filter
+
+
+        # l_adv_filter = 0.
+        # adv_preds = self.net_g(filtered_adv)
+
+        # l_adv_filter += self.cri_pix(adv_preds, preds)
+            
+        # loss_dict['l_adv_filter'] = l_adv_filter
+
+
+        # loss_filter = ( l_pix_filter * 1./(1+self.alpha) + l_adv_filter * self.alpha/(1+self.alpha) ) + 0. * sum(p.sum() for p in self.net_g.parameters())
+        
+    
+        # loss_filter.backward()
+        # use_grad_clip = self.opt['train'].get('use_grad_clip', True)
+        # if use_grad_clip:
+        #     torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
+        # self.optimizer_g.step()
+
+
+        
+
+        
+    
+                
 
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
