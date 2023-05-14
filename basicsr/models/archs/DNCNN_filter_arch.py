@@ -11,40 +11,36 @@ class Adaptive_freqfilter_regression(nn.Module):
         super().__init__()
 
         # self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down1 = nn.Conv2d(16, 32, 2, 2, bias=True)
+        self.conv1 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        # self.down1 = nn.Conv2d(16, 32, 2, 2, bias=True)
+        self.down1 = nn.AvgPool2d(kernel_size=2, stride=2)
                                
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1, stride=1, groups=1,bias=True)
-        self.down2 = nn.Conv2d(32, 64, 2, 2, bias=True)
+        # self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1, stride=1, groups=1,bias=True)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1, stride=1, groups=1,bias=True)
+        # self.down2 = nn.Conv2d(32, 64, 2, 2, bias=True)
+        self.down2 = nn.AvgPool2d(kernel_size=2, stride=2)
 
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down3 = nn.Conv2d(64, 128, 2, 2, bias=True)
-
-        self.conv4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down4 = nn.Conv2d(128, 256, 2, 2, bias=True)
-
+        # self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+ 
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
         self.relu = nn.ReLU()
         self.sig = nn.Sigmoid()
         self.soft = nn.Softmax(dim=0)
-        
+        # reg4 setting
+        self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
+  
+        self.fclayer_v1 = nn.Linear(64, 256)
+        self.fclayer_v2 = nn.Linear(256, len(self.radius_factor_set))
+        self.leaky_relu = nn.LeakyReLU()
 
-        self.fclayer_r1 = nn.Linear(256, 512)
-        self.fclayer_r2 = nn.Linear(512, 10)
-        self.fclayer_v1 = nn.Linear(256, 512)
-        self.fclayer_v2 = nn.Linear(512, 10)
-
-        # self.multset = torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6 ,1.8, 2.0]).cuda()
-        self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
-
-
+   
     def forward(self, x):
         B, C, H, W = x.size()
         inp = x
 
         a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
         dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
-        # dist = dist.repeat(B, 1, 1).to(x.device)
         dist = dist.to(x.device)
         max_radius = math.sqrt(H*H+W*W)/2
 
@@ -53,20 +49,17 @@ class Adaptive_freqfilter_regression(nn.Module):
         x = torch.fft.fftshift(x)
 
         x_mag = torch.abs(x)
-        # x_mag_max = torch.max(x_mag)
-        # x_fq = x_mag / x_mag_max
-        y = self.conv1(x_mag)
+        x_mag = torch.log10(x_mag + 1)
+
+        filter_input = torch.cat((inp,x_mag), dim=1)
+        y = self.conv1(filter_input)
         y = self.relu(y)
         y = self.down1(y)
         y = self.conv2(y)
         y = self.relu(y)
         y = self.down2(y)
         y = self.conv3(y)
-        y = self.relu(y)
-        y = self.down3(y)
-        y = self.conv4(y)
-        y = self.relu(y)
-        y = self.down4(y)
+
 
         y = self.avgpool(y)
         y = y.squeeze(-1)
@@ -74,76 +67,47 @@ class Adaptive_freqfilter_regression(nn.Module):
 
         # print(y.size())
 
-        radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
-        value_set =  self.sig(self.fclayer_v2(self.fclayer_v1(y)))
-        radius_factor_set = torch.mean(radius_factor_set, dim=0)
-        for i in range(1, len(radius_factor_set)):
-            radius_factor_set[i] += radius_factor_set[i-1]
-        value_set = torch.mean(value_set, dim=0)
-
-        # radius_factor_set = radius_factor_set.reshape(10, 10)
-        # print('ori : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # print('soft : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # print('soft : ',radius_factor_set)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # radius_factor_set = F.softmax(radius_factor_set, dim=1)
-        # radius_factor_set = self.soft(radius_factor_set)
-
-        # print('ori : ',radius_factor_set)
-        # radius_factor_set = radius_factor_set * self.multset
-        # print('multi :', radius_factor_set)
-        # radius_factor_set = radius_factor_set.sum(-1)
-        # print('sum :', radius_factor_set)
-        
+        # radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
+        value_set =  self.leaky_relu(self.fclayer_v2(self.fclayer_v1(y)))
+        # value_set =  self.sig(self.fclayer_v2(self.fclayer_v1(y)))
+        radius_set = max_radius*self.radius_factor_set
 
 
-        # value_set= value_set.view(10, 10)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = F.softmax(value_set, dim=1)
-        # value_set = self.soft(value_set)
-
-        # print('ori : ',value_set[0])
-        # value_set = value_set * self.multset
-        # print('multi :', value_set[0])
-        # value_set = value_set.sum(-1)
-        # print('sum :', value_set[0])
-      
-        
-
-        # print('radius set : ', radius_factor_set, 'value set : ', value_set)
-        # print(radius_factor_set.grad)
-        # print(radius_set.size(), dist.size())
-
-        radius_set = max_radius*radius_factor_set
         mask = []
-        zero = torch.tensor(0.0, dtype=torch.float32).cuda()
-        fq_mask = torch.zeros_like(dist).cuda()
+        # for i in range(len(self.radius_factor_set)):
+        #     if i == 0:
+        #         mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device))))
+        #     else : 
+        #         mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) -  torch.sigmoid(radius_set[i-1].to(x.device) - dist.to(x.device))))
+        # print(mask.shape)
+        zero_mask = torch.zeros_like(dist).cuda()
+        one_mask = torch.ones_like(dist).cuda()
         for i in range(len(radius_set)):
             if i == 0:
-                # mask.append(torch.where((dist < radius_set[i]), value_set[i], zero))
-                fq_mask = torch.where((dist < radius_set[i]), value_set[i], fq_mask)
-                # mask.append(torch.sigmoid(radius_set[i] - dist) * value_set[i])
+                mask.append(torch.where((dist <= radius_set[i]), one_mask, zero_mask))
             else :
-                # mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], zero))
-                fq_mask = torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), value_set[i], fq_mask)
-                # mask.append((torch.sigmoid(radius_set[i] - dist) - torch.sigmoid(radius_set[i-1] - dist)) * value_set[i])
+                mask.append(torch.where((dist <= radius_set[i]) & (dist > radius_set[i-1]), one_mask, zero_mask))
+
+
+        fq_mask_set = torch.stack(mask, dim=0)
+      
+        # value_set [B, 100, 1, 1], fq_mask_set [1, 100, H, W]
+        fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
+        fq_mask = torch.sum(fq_mask, dim=1)
         
 
 
-        lowpass = (x*fq_mask)
+        lowpass = (x*fq_mask.unsqueeze(1))
 
         lowpass = torch.fft.ifftshift(lowpass)
 
         lowpass = torch.fft.ifftn(lowpass, dim=(-1,-2))
 
-        lowpass = torch.abs(lowpass)
-        # lowpass = lowpass.real
+        # lowpass = torch.abs(lowpass)
+        lowpass = torch.clamp(lowpass.real, 0 , 1)
 
-        return lowpass, fq_mask, radius_factor_set, value_set, x_mag
+
+        return lowpass, fq_mask, value_set
 
 class Adaptive_freqfilter_classification(nn.Module):
     def __init__(self):
@@ -246,7 +210,7 @@ class Adaptive_freqfilter_classification(nn.Module):
         return lowpass, fq_mask, self.radius_factor_set, value_set, x_fq
 
 
-class Lowpassfilter(nn.Module):
+class Highpassfilter(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -254,13 +218,13 @@ class Lowpassfilter(nn.Module):
         self.radius1_val = nn.Parameter(torch.tensor(1.0))
 
         self.radius2 = nn.Parameter(torch.tensor(0.5))
-        self.radius2_val = nn.Parameter(torch.tensor(0.7))
+        self.radius2_val = nn.Parameter(torch.tensor(1.0))
 
         self.radius3 = nn.Parameter(torch.tensor(0.7))
-        self.radius3_val = nn.Parameter(torch.tensor(0.5))
+        self.radius3_val = nn.Parameter(torch.tensor(1.0))
 
         self.radius4 = nn.Parameter(torch.tensor(1.0))
-        self.radius4_val = nn.Parameter(torch.tensor(0.2))
+        self.radius4_val = nn.Parameter(torch.tensor(0.0))
 
      
 
@@ -310,35 +274,40 @@ class Lowpassfilter(nn.Module):
 class DNCNN_filter(nn.Module):
     """DnCNN as defined in https://arxiv.org/abs/1608.03981 
         reference implementation: https://github.com/SaoYan/DnCNN-PyTorch"""
-    def __init__(self, depth=20, n_channels=64, image_channels=3, bias=True, kernel_size=3):
+    def __init__(self, depth=20, n_channels=64, image_channels=3, bias=False, kernel_size=3):
         super(DNCNN_filter, self).__init__()
         kernel_size = 3
         padding = 1
 
         self.bias = bias
-        self.filter = Adaptive_freqfilter_classification()
+        # self.filter = Adaptive_freqfilter_regression()
+        # self.filter = Highpassfilter()
         # if not bias:
         # 	norm_layer = BFBatchNorm2d.BFBatchNorm2d
         # else:
 
-        norm_layer = nn.BatchNorm2d
+        # norm_layer = nn.BatchNorm2d
 
-        self.depth = depth;
+        self.depth = depth
 
 
-        self.first_layer = nn.Conv2d(in_channels=image_channels, out_channels=n_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
+        self.first_layer = nn.Conv2d(in_channels=3, out_channels=n_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
 
-        self.hidden_layer_list = [None] * (self.depth - 2);
+        self.hidden_layer_list = [None] * (self.depth - 2)
 
-        self.bn_layer_list = [None] * (self.depth -2 );
+        # self.bn_layer_list = [None] * (self.depth -2 );
 
         for i in range(self.depth-2):
-            self.hidden_layer_list[i] = nn.Conv2d(in_channels=n_channels, out_channels=n_channels, kernel_size=kernel_size, padding=padding, bias=self.bias);
-            self.bn_layer_list[i] = norm_layer(n_channels)
+            self.hidden_layer_list[i] = nn.Conv2d(in_channels=n_channels, out_channels=n_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
+            # self.bn_layer_list[i] = norm_layer(n_channels)
 
-        self.hidden_layer_list = nn.ModuleList(self.hidden_layer_list);
-        self.bn_layer_list = nn.ModuleList(self.bn_layer_list);
+        self.hidden_layer_list = nn.ModuleList(self.hidden_layer_list)
+        # self.bn_layer_list = nn.ModuleList(self.bn_layer_list);
         self.last_layer = nn.Conv2d(in_channels=n_channels, out_channels=image_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
+
+        self.feautre_to_img1 = nn.Conv2d(in_channels=n_channels, out_channels=image_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
+        # self.feautre_to_img2 = nn.Conv2d(in_channels=n_channels, out_channels=image_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
+        # self.feautre_to_img3 = nn.Conv2d(in_channels=n_channels, out_channels=image_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
 
         self._initialize_weights()
 
@@ -356,16 +325,24 @@ class DNCNN_filter(nn.Module):
 
     def forward(self, x):
         y = x
-        x = self.filter(x)[0]
-        out = self.first_layer(x);
-        out = F.relu(out);
+        # x = self.filter(x)[0]
+        # x = self.filter(x)
+        # filtered = torch.cat((y,x), dim=1)
+        out = self.first_layer(x)
+        out = F.relu(out)
 
         for i in range(self.depth-2):
-            out = self.hidden_layer_list[i](out);
-            out = self.bn_layer_list[i](out);
+            out = self.hidden_layer_list[i](out)
+            # out = self.bn_layer_list[i](out);
             out = F.relu(out)
+            if i == 8 :
+                img = self.feautre_to_img1(out)
+            # elif i == 8 :
+            #     img = self.feautre_to_img2(out)
+            # elif i == 13 :
+            #     img = self.feautre_to_img3(out)
 
-        out = self.last_layer(out);
+        out = self.last_layer(out)
         
         return y-out
 
