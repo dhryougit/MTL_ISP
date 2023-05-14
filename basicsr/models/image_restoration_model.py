@@ -45,6 +45,7 @@ class Random_frequency_replacing(nn.Module):
 
    
         self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
+        self.value_set = torch.arange(1., 0., -0.01).cuda()
 
    
     def forward(self, clean, noisy):
@@ -65,7 +66,11 @@ class Random_frequency_replacing(nn.Module):
 
        
         radius_set = max_radius*self.radius_factor_set
-        value_set =  torch.bernoulli(torch.ones(B,len(self.radius_factor_set))*0.16).cuda()
+
+        value_prob = self.value_set.view(1, -1)
+        value_prob = value_prob.repeat(B, 1)
+
+        value_set =  torch.bernoulli(value_prob*0.3).cuda()
        
 
         mask = []
@@ -85,6 +90,7 @@ class Random_frequency_replacing(nn.Module):
         # print(fq_mask[0])
     
         # fq_mask [B,H,W]
+        # bn1이 작은 확률 --> noise에 넣어줌 
         bn1_mask = fq_mask
         bn2_mask = torch.ones_like(bn1_mask)-bn1_mask
 
@@ -115,7 +121,7 @@ class ImageRestorationModel(BaseModel):
         self.net_g = self.model_to_device(self.net_g)
         self.prune_rate = 0
         self.test_mode = 'ori'
-        self.passfilter = Random_frequency_replacing()
+        self.Random_frequency_replacing = Random_frequency_replacing()
         self.filter_on = 'on'
         
 
@@ -147,11 +153,16 @@ class ImageRestorationModel(BaseModel):
 
         self.scale = int(opt['scale'])
 
+        # check_module = ['module.hidden_layer_list.3', 'module.hidden_layer_list.8', module.feautre_to_img1
+        # for name, module in self.net_g.named_modules():
+        #     if name == 'module.feautre_to_img1' or name == 'module.feautre_to_img2' or name == 'module.feautre_to_img3' :
+        #         module.register_forward_hook(forward_hook)
+
         for name, module in self.net_g.named_modules():
-            if name == 'module.filter':
+            if name == 'module.filter' :
                 module.register_forward_hook(forward_hook)
 
-     
+        # module.hidden_layer_list.3
 
    
 
@@ -458,8 +469,6 @@ class ImageRestorationModel(BaseModel):
     def optimize_parameters(self, current_iter, tb_logger):
         
      
-
-
         noise = self.genearte_gaussian_noise()
         self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
 
@@ -474,48 +483,55 @@ class ImageRestorationModel(BaseModel):
 
         preds = self.net_g(self.lq)
 
+        loss_dict = OrderedDict()
+
         l_pix = 0.
         l_pix += self.cri_pix(preds, self.gt)
-
-        fq_replaced = self.passfilter(preds, self.lq)
-        fq_replaced_preds = self.net_g(fq_replaced)
-        l_pix_replaced = 0.
-        l_pix_replaced += self.cri_pix(fq_replaced_preds, self.gt)
-            
-        loss_dict = OrderedDict()
         loss_dict['l_gaussian_0_55'] = l_pix
-        loss_dict['l_gaussian_0_55_replaced'] = l_pix_replaced
 
+        if self.opt['train']['fq_aug']:
+            fq_replaced = self.Random_frequency_replacing(preds, self.lq)
+            preds_replaced = self.net_g(fq_replaced)
+            l_pix_replaced = 0.
+            l_pix_replaced += self.cri_pix(preds_replaced, self.gt)
+            loss_dict['l_gaussian_0_55_replaced'] = l_pix_replaced
+
+    
         if self.opt['train']['adv']:
             l_adv = 0.
             adv_preds = self.net_g(adv)
-
             l_adv += self.cri_pix(adv_preds, preds)
-
-            fq_replaced = self.passfilter(adv_preds, adv)
-            fq_replaced_preds = self.net_g(fq_replaced)
-            l_adv_replaced = 0.
-            l_adv_replaced += self.cri_pix(fq_replaced_preds, preds)
-                
             loss_dict['l_adv'] = l_adv
-            loss_dict['l_adv_replaced'] = l_adv_replaced
+            loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
 
-            loss_ori = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
-            loss_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) )
-            loss_total = 0.9*loss_ori + 0.1*loss_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
-            loss_total.backward()
-        else :
+            if self.opt['train']['fq_aug']:
+                adv_fq_replaced = self.Random_frequency_replacing(adv_preds, adv)
+                adv_preds_replaced = self.net_g(adv_fq_replaced)
+                l_adv_replaced = 0.
+                l_adv_replaced += self.cri_pix(adv_preds_replaced, preds)
+                loss_dict['l_adv_replaced'] = l_adv_replaced
+                loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
+
+
+        if self.opt['train']['adv']:
+            if self.opt['train']['fq_aug']:
+                l_total = loss_adv + loss_adv_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
+            
+            else:
+                l_total = loss_adv + 0. * sum(p.sum() for p in self.net_g.parameters())
+        else : 
             l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
 
 
-
+        l_total.backward()
+            
         use_grad_clip = self.opt['train'].get('use_grad_clip', True)
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
         self.optimizer_g.step()
         self.optimizer_g_filter.step()
 
-
+        # replacement
 
         if (current_iter-1) % 200 == 0:
             if self.opt['train']['filter']:
