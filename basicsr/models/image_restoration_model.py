@@ -18,7 +18,7 @@ from basicsr.models.archs import define_network
 from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.dist_util import get_dist_info
-
+from basicsr.utils.mask import Masker
 
 import matplotlib.pyplot as plt
 
@@ -35,17 +35,23 @@ metric_module = importlib.import_module('basicsr.metrics')
 
 def forward_hook(module, input, output):
     module.feature_map = output
-
-
+    inputs = input[0]
+    module.input = inputs
 
 
 class Random_frequency_replacing(nn.Module):
-    def __init__(self):
+    def __init__(self, fbr_param=0.5, mode='linear'):
         super().__init__()
 
    
         self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
-        self.value_set = torch.arange(1., 0., -0.01).cuda()
+        if mode == 'linear':
+            print('linear')
+            self.value_set = torch.arange(1., 0., -0.01).cuda()
+        else:
+            self.value_set = torch.exp(torch.linspace(0, -10, 100)).cuda()
+        self.fbr_param = fbr_param
+        
 
    
     def forward(self, clean, noisy):
@@ -70,7 +76,8 @@ class Random_frequency_replacing(nn.Module):
         value_prob = self.value_set.view(1, -1)
         value_prob = value_prob.repeat(B, 1)
 
-        value_set =  torch.bernoulli(value_prob*0.3).cuda()
+        value_set =  torch.bernoulli(value_prob*self.fbr_param).cuda()
+        # value_set =  torch.bernoulli(torch.ones(B,len(self.radius_factor_set))*0.2).cuda()
        
 
         mask = []
@@ -121,8 +128,10 @@ class ImageRestorationModel(BaseModel):
         self.net_g = self.model_to_device(self.net_g)
         self.prune_rate = 0
         self.test_mode = 'ori'
-        self.Random_frequency_replacing = Random_frequency_replacing()
+        self.Random_frequency_replacing = Random_frequency_replacing(fbr_param=self.opt['train']['fbr_param'], mode=self.opt['train']['fbr_mode'])
         self.filter_on = 'on'
+        self.masker = Masker(width = 3, mode='zero')
+        self.mseloss =  nn.MSELoss()
         
 
         self.alpha = self.opt['train']['alpha']
@@ -153,10 +162,10 @@ class ImageRestorationModel(BaseModel):
 
         self.scale = int(opt['scale'])
 
-        # check_module = ['module.hidden_layer_list.3', 'module.hidden_layer_list.8', module.feautre_to_img1
-        # for name, module in self.net_g.named_modules():
-        #     if name == 'module.feautre_to_img1' or name == 'module.feautre_to_img2' or name == 'module.feautre_to_img3' :
-        #         module.register_forward_hook(forward_hook)
+
+        for name, module in self.net_g.named_modules():
+            if name == 'module.feautre_to_img1':
+                module.register_forward_hook(forward_hook)
 
         for name, module in self.net_g.named_modules():
             if name == 'module.filter' :
@@ -387,11 +396,12 @@ class ImageRestorationModel(BaseModel):
         return x_perturbed.detach()
 
 
-    def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.03, num_iter=1):
+    def pgd_attack(self, model, x, y, epsilon=0.3, alpha=(16/255), num_iter=1):
     # def pgd_attack(self, model, x, y, epsilon=0.1, alpha=0.01, num_iter=40):
         B,C,H,W = x.size()
         x_pgd = x.clone().detach()
-
+        alpha=(self.opt['train']['perturb']['alpha']/255)
+        num_iter = self.opt['train']['perturb']['iter']
         # PGD attack loop
         for t in range(num_iter):
             # Forward pass to compute the model's output and loss
@@ -468,33 +478,93 @@ class ImageRestorationModel(BaseModel):
 
     def optimize_parameters(self, current_iter, tb_logger):
         
-     
-        noise = self.genearte_gaussian_noise()
-        self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+        
+        # noise = self.genearte_poisson_noise()
+        # self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+
+
+        # loss_dict = OrderedDict()
+        # self.optimizer_g_filter.zero_grad()
+        # preds = self.net_g(self.lq)
+
+        # for name, module in self.net_g.named_modules():
+        #     if name == 'module.filter':
+        #         x, mask, v_set = module.feature_map
+
+        # loss_filter = 0.
+        # loss_filter += self.cri_pix(preds, self.gt) + 0. * sum(p.sum() for p in self.net_g.parameters())
+        # # tmp = torch.ones_like(v_set)
+        # # loss_filter = self.mseloss(tmp, v_set) + 0. * sum(p.sum() for p in self.net_g.parameters())
+        # loss_dict['l_filter'] = loss_filter
+        # loss_filter.backward()
+        
+
+        # if (current_iter-1) % 200 == 0:
+        #     for name, module in self.net_g.named_modules():
+        #         if name == 'module.filter':
+        #             x, mask, v_set = module.feature_map
+        #     if v_set != None:
+        #         print(v_set[0])
+    
+        # self.optimizer_g_filter.step()
+
+        # else:
+            # n2n
+            # original_noise = self.lq
+            # new_noise = torch.clamp(self.lq+ noise.cuda(), 0, 1)
+
+
+
+            # n2s
+            # new_/input, mask = self.masker.mask(self.lq, current_iter)
+            # net_output = model(net_input)
+            
+        
 
         if self.opt['train']['adv']:
             adv = self.pgd_attack(self.net_g, self.lq, self.gt)
-
+        
         self.optimizer_g.zero_grad()
         self.optimizer_g_filter.zero_grad()
 
         if self.opt['train'].get('mixup', False):
             self.mixup_aug()
 
+        loss_dict = OrderedDict()
         preds = self.net_g(self.lq)
 
-        loss_dict = OrderedDict()
-
+    
         l_pix = 0.
         l_pix += self.cri_pix(preds, self.gt)
-        loss_dict['l_gaussian_0_55'] = l_pix
+        loss_dict['l_real'] = l_pix
+
+
+        if self.opt['train']['feature']:
+            for name, module in self.net_g.named_modules():
+                if name == 'module.feautre_to_img1':
+                    preds_feature = module.feature_map
+                    
+
+            l_pix_feature = 0.
+            l_pix_feature += self.cri_pix(preds_feature, self.gt)
+            loss_dict['l_gaussian_0_55_feature'] = l_pix_feature
+
 
         if self.opt['train']['fq_aug']:
             fq_replaced = self.Random_frequency_replacing(preds, self.lq)
             preds_replaced = self.net_g(fq_replaced)
             l_pix_replaced = 0.
             l_pix_replaced += self.cri_pix(preds_replaced, self.gt)
-            loss_dict['l_gaussian_0_55_replaced'] = l_pix_replaced
+            loss_dict['l_real_replaced'] = l_pix_replaced
+
+            if self.opt['train']['feature']:
+                for name, module in self.net_g.named_modules():
+                    if name == 'module.feautre_to_img1':
+                        preds_repalced_feature = module.feature_map
+
+                l_pix_replaced_feature = 0.
+                l_pix_replaced_feature += self.cri_pix(preds_repalced_feature, self.gt)
+                loss_dict['l_gaussian_0_55_replaced_feature'] = l_pix_replaced_feature
 
     
         if self.opt['train']['adv']:
@@ -502,7 +572,17 @@ class ImageRestorationModel(BaseModel):
             adv_preds = self.net_g(adv)
             l_adv += self.cri_pix(adv_preds, preds)
             loss_dict['l_adv'] = l_adv
-            loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
+            
+
+            if self.opt['train']['feature']:
+                for name, module in self.net_g.named_modules():
+                    if name == 'module.feautre_to_img1':
+                        adv_preds_feature = module.feature_map
+                        
+
+                l_adv_feature = 0.
+                l_adv_feature += self.cri_pix(adv_preds_feature, preds)
+                loss_dict['l_adv_feature'] = l_adv_feature
 
             if self.opt['train']['fq_aug']:
                 adv_fq_replaced = self.Random_frequency_replacing(adv_preds, adv)
@@ -510,17 +590,41 @@ class ImageRestorationModel(BaseModel):
                 l_adv_replaced = 0.
                 l_adv_replaced += self.cri_pix(adv_preds_replaced, preds)
                 loss_dict['l_adv_replaced'] = l_adv_replaced
-                loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
+                
+                if self.opt['train']['feature']:
+                    for name, module in self.net_g.named_modules():
+                        if name == 'module.feautre_to_img1':
+                            adv_preds_repalced_feature = module.feature_map
 
+                    l_adv_replaced_feature = 0.
+                    l_adv_replaced_feature += self.cri_pix(adv_preds_repalced_feature, preds)
+                    loss_dict['l_adv_replaced_feature'] = l_adv_replaced_feature
+
+    
+    
 
         if self.opt['train']['adv']:
+            loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
             if self.opt['train']['fq_aug']:
-                l_total = loss_adv + loss_adv_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
+                loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
+
+                if self.opt['train']['feature']:
+                    l_feature = ( l_pix_feature * 1./(1+self.alpha) + l_adv_feature * self.alpha/(1+self.alpha) )
+                    l_replaced_feature =  ( l_pix_replaced_feature * 1./(1+self.alpha) + l_adv_replaced_feature * self.alpha/(1+self.alpha) )
+                    l_total_feature = l_feature + l_replaced_feature
+                    l_total = loss_adv + loss_adv_replaced + 0.1*l_total_feature + 0. * sum(p.sum() for p in self.net_g.parameters())
+                else : 
+                
+                    l_total = loss_adv + loss_adv_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
             
             else:
                 l_total = loss_adv + 0. * sum(p.sum() for p in self.net_g.parameters())
         else : 
             l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
+
+        # loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
+        # loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
+        # l_total = loss_adv  + loss_adv_replaced + 0. * sum(p.sum() for p in self.net_g.parameters())
 
 
         l_total.backward()
@@ -529,76 +633,18 @@ class ImageRestorationModel(BaseModel):
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
         self.optimizer_g.step()
-        self.optimizer_g_filter.step()
+        # self.optimizer_g_filter.step()
 
         # replacement
 
-        if (current_iter-1) % 200 == 0:
-            if self.opt['train']['filter']:
-                for name, module in self.net_g.named_modules():
-                    if name == 'module.filter':
-                        x, mask, v_set = module.feature_map
-                if v_set != None:
-                    print(v_set[0])
-
-        # self.optimizer_g.zero_grad()
-        # self.optimizer_g_filter.zero_grad()
-
-        # mask, v_set = self.passfilter(self.gt)
-        
-        # filtered_lq = torch.fft.fftn(self.lq, dim=(-1,-2))
-        # filtered_lq = torch.fft.fftshift(filtered_lq)
-        # filtered_lq = (filtered_lq*mask.unsqueeze(1))
-        # filtered_lq = torch.fft.ifftshift(filtered_lq)
-        # filtered_lq = torch.fft.ifftn(filtered_lq, dim=(-1,-2))
-        # filtered_lq = torch.clamp(filtered_lq.real, 0 , 1)
-
-
-        # filtered_gt = torch.fft.fftn(self.gt, dim=(-1,-2))
-        # filtered_gt = torch.fft.fftshift(filtered_gt)        
-        # filtered_gt = (filtered_gt*mask.unsqueeze(1))
-        # filtered_gt = torch.fft.ifftshift(filtered_gt)
-        # filtered_gt = torch.fft.ifftn(filtered_gt, dim=(-1,-2))
-        # filtered_gt = torch.clamp(filtered_gt.real, 0 , 1)
-
-
-        # filtered_adv = torch.fft.fftn(adv, dim=(-1,-2))
-        # filtered_adv = torch.fft.fftshift(filtered_adv)        
-        # filtered_adv = (filtered_adv*mask.unsqueeze(1))
-        # filtered_adv = torch.fft.ifftshift(filtered_adv)
-        # filtered_adv = torch.fft.ifftn(filtered_adv, dim=(-1,-2))
-        # filtered_adv = torch.clamp(filtered_adv.real, 0 , 1)
+        # if (current_iter-1) % 200 == 0:
+        #     for name, module in self.net_g.named_modules():
+        #         if name == 'module.filter':
+        #             x, mask, v_set = module.feature_map
+        #     if v_set != None:
+        #         print(v_set[0])
 
         
-
-
-        # preds = self.net_g(filtered_lq)
-    
-   
-        # l_pix_filter = 0.
-        # l_pix_filter += self.cri_pix(preds, filtered_gt)
-       
-
-        # loss_dict['l_gaussian_0_55_filter'] = l_pix_filter
-
-
-        # l_adv_filter = 0.
-        # adv_preds = self.net_g(filtered_adv)
-
-        # l_adv_filter += self.cri_pix(adv_preds, preds)
-            
-        # loss_dict['l_adv_filter'] = l_adv_filter
-
-
-        # loss_filter = ( l_pix_filter * 1./(1+self.alpha) + l_adv_filter * self.alpha/(1+self.alpha) ) + 0. * sum(p.sum() for p in self.net_g.parameters())
-        
-    
-        # loss_filter.backward()
-        # use_grad_clip = self.opt['train'].get('use_grad_clip', True)
-        # if use_grad_clip:
-        #     torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
-        # self.optimizer_g.step()
-
 
         
 

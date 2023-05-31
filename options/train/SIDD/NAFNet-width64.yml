@@ -5,7 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: tmp
+name: NAFNet64-finetuning-pgd-16
 # name: xxx
 model_type: ImageRestorationModel
 scale: 1
@@ -30,7 +30,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 2
+    batch_size_per_gpu: 4
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -53,16 +53,17 @@ network_g:
 # path
 path:
   pretrain_network_g: ./finetuned_models/NAFNet-SIDD-width64.pth
-  advtrained_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
+  # advtrained_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
   # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
   # pretrain_network_g: ./finetuned_models/NAFNet-weight64-advtrained.pth
   # pretrain_network_g: ./finetuned_models/adv-training.pth
   # pretrain_network_g: ./finetuned_models/adv-training.pth
   # pretrain_network_g: ./finetuned_models/net_g_300000.pth
-  # pretrain_network_g: ./experiments/NAFNet-width64-zero_pr0.5_taylorpruned_hfs_cutoff0.5/models/zero_net_g_latest.pth
+  # pretrain_network_g: ~
   # strict_load_g: true
-  strict_load_g: False
+  strict_load_g: true
   resume_state: ~
+  root: '/131_data/dhryou/FF'
 
 # training settings
 train:
@@ -74,10 +75,10 @@ train:
 
   scheduler:
     type: TrueCosineAnnealingLR
-    T_max: 400000
-    eta_min: !!float 1e-7
+    T_max: 25000
+    eta_min: !!float 1e-6
 
-  total_iter: 400000
+  total_iter: 25000
   warmup_iter: -1 # no warm up
 
   # losses
@@ -85,6 +86,19 @@ train:
     type: PSNRLoss
     loss_weight: 1
     reduction: mean
+
+  adv: true
+  alpha: 0.5
+  filter: false
+  filter_rate : 0.3
+  fq_aug : false
+  feature : false
+  fbr_param : 0.5
+  fbr_mode : 'linear'
+
+  perturb:
+    alpha: 16
+    iter: 1
 
 # validation settings
 val:
@@ -108,7 +122,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    project: tmp
+    project: NAFNet-generalization
     resume_id: ~
 
 # dist training settings

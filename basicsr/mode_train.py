@@ -154,7 +154,7 @@ def main():
     # torch.backends.cudnn.deterministic = True
 
     # automatic resume ..
-    state_folder_path = '/131_data/dhryou/NAFNet/experiments/{}/training_states/'.format(opt['name'])
+    
     import os
     try:
         states = os.listdir(state_folder_path)
@@ -232,22 +232,22 @@ def main():
     # for epoch in range(start_epoch, total_epochs + 1):
     epoch = start_epoch
 
-    modes = ['real', 'seen_noise', 'unseen_noise']
-    for mode in modes:
-        model.change_test_mode(mode)
-        if opt.get('val') is not None and (current_iter == 0):
-            rgb2bgr = opt['val'].get('rgb2bgr', True)
-            # wheather use uint8 image to compute metrics
-            use_image = opt['val'].get('use_image', True)
-            model.validation(val_loader, current_iter, tb_logger,
-                                opt['val']['save_img'], rgb2bgr, use_image )
-            log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
-            log_vars.update({'lrs': model.get_current_learning_rate()})
-            log_vars.update(model.get_current_log())
+    # modes = ['real', 'seen_noise', 'unseen_noise']
+    # for mode in modes:
+    #     model.change_test_mode(mode)
+    #     if opt.get('val') is not None and (current_iter == 0):
+    #         rgb2bgr = opt['val'].get('rgb2bgr', True)
+    #         # wheather use uint8 image to compute metrics
+    #         use_image = opt['val'].get('use_image', True)
+    #         model.validation(val_loader, current_iter, tb_logger,
+    #                             opt['val']['save_img'], rgb2bgr, use_image )
+    #         log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
+    #         log_vars.update({'lrs': model.get_current_learning_rate()})
+    #         log_vars.update(model.get_current_log())
 
-            prune_rate = model.get_prune_rate()
-            if opt['rank'] == 0:
-                msg_logger(log_vars, prune_rate)
+    #         prune_rate = model.get_prune_rate()
+    #         if opt['rank'] == 0:
+    #             msg_logger(log_vars, prune_rate)
 
 
     while current_iter <= total_iters:
@@ -300,16 +300,16 @@ def main():
                 # msg_logger(log_vars, prune_rate)
            
             
-            if current_iter % 3000 == 0:
+            if current_iter % 2000 == 0:
                 logger.info('Saving models and training states.')
                 model.save(epoch, current_iter)
 
       
             # every 2 iteration validsion
-            if (current_iter % 200 == 0) : 
+            if (current_iter % 500 == 0) : 
                 # modes = ['ori', 'adv', 'noise']
                 # modes = ['real', 'adv', 'seen_noise', 'unseen_noise']
-                modes = ['real', 'seen_noise', 'unseen_noise']
+                modes = ['real', 'seen_noise']
                 # modes = ['ori', 'noise']
                 for mode in modes:
                     model.change_test_mode(mode)
