@@ -34,7 +34,7 @@ class DNCNN(nn.Module):
         for _ in range(depth-2):
             layers.append(nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size,
                                     padding=1, bias=False))
-            layers.append(nn.BatchNorm2d(n_filters))
+            # layers.append(nn.BatchNorm2d(n_filters))
             layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Conv2d(in_channels=n_filters, out_channels=img_channels, kernel_size=kernel_size,
                                 padding=1, bias=False))

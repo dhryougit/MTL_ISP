@@ -5,11 +5,11 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet16-small-0-55-train-pgd-adv-filter-reg4
+name: NAFNet16-small-pgd-at2
 # name: xx/
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 2
+num_gpu: 4
 manual_seed: 10
 
 datasets:
@@ -30,7 +30,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 32
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -44,7 +44,7 @@ datasets:
 
 
 network_g:
-  type: NAFNet_filter
+  type: NAFNet
   width: 16
   enc_blk_nums: [2, 2, 2, 2]
   middle_blk_num: 2
@@ -79,7 +79,7 @@ train:
     T_max: 200000
     eta_min: !!float 1e-7
 
-  total_iter: 200000
+  total_iter: 25000
   warmup_iter: -1 # no warm ups
 
   # losses
@@ -89,8 +89,9 @@ train:
     reduction: mean
 
   adv: true
-  alpha: 1.0
-  filter: true
+  alpha: 0.5
+  filter: false
+  filter_rate : 0.3
 
 # validation settings
 val:

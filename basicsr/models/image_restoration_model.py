@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import wandb
 import sys
 
-from advertorch.attacks4IP.zero_mean_pgd import L2PGDAttack
+# from advertorch.attacks4IP.zero_mean_pgd import L2PGDAttack
 import math
 torch.autograd.set_detect_anomaly(True)
 
@@ -127,7 +127,7 @@ class ImageRestorationModel(BaseModel):
         self.net_g = define_network(deepcopy(opt['network_g']))
         self.net_g = self.model_to_device(self.net_g)
         self.prune_rate = 0
-        self.test_mode = 'ori'
+        self.test_mode = 'Sidd'
         self.Random_frequency_replacing = Random_frequency_replacing(fbr_param=self.opt['train']['fbr_param'], mode=self.opt['train']['fbr_mode'])
         self.filter_on = 'on'
         self.masker = Masker(width = 3, mode='zero')
@@ -135,12 +135,12 @@ class ImageRestorationModel(BaseModel):
         
 
         self.alpha = self.opt['train']['alpha']
-        eps = 5
-        patch_size=50
-        l2_adv_tr = eps*1./255 * math.sqrt(patch_size ** 2)
-        attack = (L2PGDAttack, dict(loss_fn=nn.MSELoss(), 
-                        eps=l2_adv_tr, nb_iter=1, eps_iter=1*l2_adv_tr, rand_init=False, clip_min=0.0, clip_max=1.0, targeted=False))
-        self.adversary = attack[0](self.net_g, **attack[1])
+        # eps = 5
+        # patch_size=50
+        # l2_adv_tr = eps*1./255 * math.sqrt(patch_size ** 2)
+        # attack = (L2PGDAttack, dict(loss_fn=nn.MSELoss(), 
+        #                 eps=l2_adv_tr, nb_iter=1, eps_iter=1*l2_adv_tr, rand_init=False, clip_min=0.0, clip_max=1.0, targeted=False))
+        # self.adversary = attack[0](self.net_g, **attack[1])
         
         
 
@@ -479,8 +479,8 @@ class ImageRestorationModel(BaseModel):
     def optimize_parameters(self, current_iter, tb_logger):
         
         
-        # noise = self.genearte_poisson_noise()
-        # self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+        noise = self.genearte_poisson_noise()
+        self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
 
 
         # loss_dict = OrderedDict()
@@ -604,13 +604,13 @@ class ImageRestorationModel(BaseModel):
     
 
         if self.opt['train']['adv']:
-            loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
+            loss_adv = ( l_pix * self.alpha + l_adv * (1-self.alpha))
             if self.opt['train']['fq_aug']:
-                loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
+                loss_adv_replaced = ( l_pix_replaced * self.alpha + l_adv_replaced * (1-self.alpha) )
 
                 if self.opt['train']['feature']:
-                    l_feature = ( l_pix_feature * 1./(1+self.alpha) + l_adv_feature * self.alpha/(1+self.alpha) )
-                    l_replaced_feature =  ( l_pix_replaced_feature * 1./(1+self.alpha) + l_adv_replaced_feature * self.alpha/(1+self.alpha) )
+                    l_feature = ( l_pix_feature * self.alpha + l_adv_feature * (1-self.alpha) )
+                    l_replaced_feature =  ( l_pix_replaced_feature * self.alpha + l_adv_replaced_feature * (1-self.alpha))
                     l_total_feature = l_feature + l_replaced_feature
                     l_total = loss_adv + loss_adv_replaced + 0.1*l_total_feature + 0. * sum(p.sum() for p in self.net_g.parameters())
                 else : 
@@ -673,7 +673,7 @@ class ImageRestorationModel(BaseModel):
             self.lq = self.lq
         elif self.test_mode == 'adv':
             self.lq = self.pgd_attack(self.net_g, self.gt, self.gt)
-        elif self.test_mode =='seen_noise':
+        elif self.test_mode =='seen':
   
             B,C,H,W = self.lq.size()
             random_noise = torch.randn(B,C,H,W).cuda()
@@ -688,6 +688,8 @@ class ImageRestorationModel(BaseModel):
             B,C,H,W = self.lq.size()
             random_noise = torch.randn(B,C,H,W).cuda()
             self.lq = torch.clamp(self.gt+ random_noise*(90/255), 0, 1)
+        else:
+            self.lq = self.lq
 
         self.net_g.eval()
         with torch.no_grad():

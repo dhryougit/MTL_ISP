@@ -1,0 +1,53 @@
+basicsr      2023-06-02 02:20:27,087 INFO     logger.py:init_wandb_logger Use wandb logger with id=7700fh0a; project=ablation-advtrain.
+basicsr      2023-06-02 02:20:27,268 INFO     __init__.py:create_dataset Dataset PairedImageDataset - SIDD is created.
+basicsr      2023-06-02 02:20:27,268 INFO     __init__.py:create_dataset Dataset PairedImageDataset - SIDD is created.
+basicsr      2023-06-02 02:20:27,269 INFO     mode_train.py:create_train_val_dataloader Training statistics:
+	Number of train images: 30608
+	Dataset enlarge ratio: 1
+	Batch size per gpu: 16
+	World size (gpu number): 4
+	Require iter number per epoch: 479
+	Total epochs: 53; iters: 25000.
+basicsr      2023-06-02 02:20:27,269 INFO     mode_train.py:create_train_val_dataloader Training statistics:
+	Number of train images: 30608
+	Dataset enlarge ratio: 1
+	Batch size per gpu: 16
+	World size (gpu number): 4
+	Require iter number per epoch: 479
+	Total epochs: 53; iters: 25000.
+basicsr      2023-06-02 02:20:27,271 INFO     __init__.py:create_dataset Dataset PairedImageDataset - SIDD_val is created.
+basicsr      2023-06-02 02:20:27,271 INFO     __init__.py:create_dataset Dataset PairedImageDataset - SIDD_val is created.
+basicsr      2023-06-02 02:20:27,271 INFO     __init__.py:create_dataset Dataset PairedImageDataset - SIDD_val is created.
+basicsr      2023-06-02 02:20:27,272 INFO     mode_train.py:create_train_val_dataloader Number of val images/folders in SIDD_val: 1280
+basicsr      2023-06-02 02:20:27,272 INFO     mode_train.py:create_train_val_dataloader Number of val images/folders in SIDD_val: 1280
+basicsr      2023-06-02 02:20:27,272 INFO     mode_train.py:create_train_val_dataloader Number of val images/folders in SIDD_val: 1280
+<module 'basicsr.models.archs.DNCNN_arch' from '/home2/dhryou/Frequency_Filtering/basicsr/models/archs/DNCNN_arch.py'>
+<module 'basicsr.models.archs.NAFNet_arch' from '/home2/dhryou/Frequency_Filtering/basicsr/models/archs/NAFNet_arch.py'>
+<module 'basicsr.models.archs.NAFNet_filter_arch' from '/home2/dhryou/Frequency_Filtering/basicsr/models/archs/NAFNet_filter_arch.py'>
+<module 'basicsr.models.archs.NAFSSR_arch' from '/home2/dhryou/Frequency_Filtering/basicsr/models/archs/NAFSSR_arch.py'>
+<module 'basicsr.models.archs.DNCNN_filter_arch' from '/home2/dhryou/Frequency_Filtering/basicsr/models/archs/DNCNN_filter_arch.py'>
+INFO:basicsr:Use wandb logger with id=7700fh0a; project=ablation-advtrain.
+INFO:basicsr:Dataset PairedImageDataset - SIDD is created.
+INFO:basicsr:Training statistics:
+	Number of train images: 30608
+	Dataset enlarge ratio: 1
+	Batch size per gpu: 16
+	World size (gpu number): 4
+	Require iter number per epoch: 479
+	Total epochs: 53; iters: 25000.
+INFO:basicsr:Dataset PairedImageDataset - SIDD_val is created.
+INFO:basicsr:Number of val images/folders in SIDD_val: 1280
+linear
+.. cosineannealingLR
+basicsr      2023-06-02 02:20:29,862 INFO     __init__.py:create_model Model [ImageRestorationModel] is created.
+basicsr      2023-06-02 02:20:29,862 INFO     __init__.py:create_model Model [ImageRestorationModel] is created.
+basicsr      2023-06-02 02:20:29,862 INFO     __init__.py:create_model Model [ImageRestorationModel] is created.
+basicsr      2023-06-02 02:20:29,862 INFO     __init__.py:create_model Model [ImageRestorationModel] is created.
+INFO:basicsr:Model [ImageRestorationModel] is created.
+INFO:basicsr:Start training from epoch: 0, iter: 0
+basicsr      2023-06-02 02:20:37,765 INFO     mode_train.py:main Start training from epoch: 0, iter: 0
+basicsr      2023-06-02 02:20:37,765 INFO     mode_train.py:main Start training from epoch: 0, iter: 0
+basicsr      2023-06-02 02:20:37,765 INFO     mode_train.py:main Start training from epoch: 0, iter: 0
+basicsr      2023-06-02 02:20:37,765 INFO     mode_train.py:main Start training from epoch: 0, iter: 0
+basicsr      2023-06-02 02:20:37,765 INFO     mode_train.py:main Start training from epoch: 0, iter: 0
+/opt/conda/lib/python3.8/site-packages/torch/optim/lr_scheduler.py:129: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate

@@ -6,6 +6,78 @@ import torch.nn.functional as F
 # from models import BFBatchNorm2d
 import math
 
+class Random_frequency_replacing(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+   
+        self.radius_factor_set = torch.arange(0.01, 1.01, 0.01).cuda()
+        self.value_set = torch.arange(1., 0., -0.01).cuda()
+
+   
+    def forward(self, clean, noisy):
+        B, C, H, W = noisy.size()
+        inp = noisy
+
+        a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
+        dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
+        dist = dist.to(noisy.device)
+        max_radius = math.sqrt(H*H+W*W)/2
+
+       
+        noisy_fq = torch.fft.fftn(noisy, dim=(-1,-2))
+        noisy_fq = torch.fft.fftshift(noisy_fq)
+        clean_fq = torch.fft.fftn(clean, dim=(-1,-2))
+        clean_fq = torch.fft.fftshift(clean_fq)
+
+
+       
+        radius_set = max_radius*self.radius_factor_set
+
+        value_prob = self.value_set.view(1, -1)
+        value_prob = value_prob.repeat(B, 1)
+
+        value_set =  torch.bernoulli(value_prob*0.3).cuda()
+        # value_set =  torch.bernoulli(torch.ones(B,len(self.radius_factor_set))*0.2).cuda()
+       
+
+        mask = []
+        # zero = torch.tensor(0.0, dtype=torch.float32).cuda()
+        zero_mask = torch.zeros_like(dist).cuda()
+        one_mask = torch.ones_like(dist).cuda()
+        for i in range(len(radius_set)):
+            if i == 0:
+                mask.append(torch.where((dist < radius_set[i]), one_mask, zero_mask))
+            else :
+                mask.append(torch.where((dist < radius_set[i]) & (dist >= radius_set[i-1]), one_mask, zero_mask))
+           
+
+        fq_mask_set = torch.stack(mask, dim=0)
+        fq_mask = value_set.unsqueeze(-1).unsqueeze(-1) * fq_mask_set.unsqueeze(0)
+        fq_mask = torch.sum(fq_mask, dim=1)
+        # print(fq_mask[0])
+    
+        # fq_mask [B,H,W]
+        # bn1이 작은 확률 --> noise에 넣어줌 
+        bn1_mask = fq_mask
+        bn2_mask = torch.ones_like(bn1_mask)-bn1_mask
+
+
+        noisy_fq = (noisy_fq*bn1_mask.unsqueeze(1))
+        clean_fq = (clean_fq*bn2_mask.unsqueeze(1))
+
+        replaced_fq = noisy_fq+clean_fq
+        replaced_fq = torch.fft.ifftshift(replaced_fq)
+
+        replaced_fq = torch.fft.ifftn(replaced_fq, dim=(-1,-2))
+
+        replaced_fq = replaced_fq.real
+        # lowpass = torch.clamp(lowpass.real, 0 , 1)
+
+
+        return replaced_fq
+
+
 class Adaptive_freqfilter_regression(nn.Module):
     def __init__(self):
         super().__init__()
@@ -74,12 +146,7 @@ class Adaptive_freqfilter_regression(nn.Module):
 
 
         mask = []
-        # for i in range(len(self.radius_factor_set)):
-        #     if i == 0:
-        #         mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device))))
-        #     else : 
-        #         mask.append((torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) -  torch.sigmoid(radius_set[i-1].to(x.device) - dist.to(x.device))))
-        # print(mask.shape)
+
         zero_mask = torch.zeros_like(dist).cuda()
         one_mask = torch.ones_like(dist).cuda()
         for i in range(len(radius_set)):
@@ -109,105 +176,6 @@ class Adaptive_freqfilter_regression(nn.Module):
 
         return lowpass, fq_mask, value_set
 
-class Adaptive_freqfilter_classification(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        # self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down1 = nn.Conv2d(16, 32, 2, 2, bias=True)
-                               
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1, stride=1, groups=1,bias=True)
-        self.down2 = nn.Conv2d(32, 64, 2, 2, bias=True)
-
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.down3 = nn.Conv2d(64, 128, 2, 2, bias=True)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1,1))
-        self.relu = nn.ReLU()
-        self.sig = nn.Sigmoid()
-        self.soft = nn.Softmax(dim=0)
-        self.temp = torch.tensor(1)
-        
-
-        self.fclayer_v1 = nn.Linear(128, 256)
-        self.fclayer_v2 = nn.Linear(256, 5)
-
-        # self.multset = torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6 ,1.8, 2.0]).cuda()
-        # self.multset = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
-        # self.radius_factor_set = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9, 1.0]).cuda()
-
-        self.radius_factor_set = torch.tensor([0.3, 0.5, 0.7, 1.0]).cuda()
-
-
-    def forward(self, x):
-        B, C, H, W = x.size()
-        inp = x
-
-        a, b = torch.meshgrid(torch.arange(H), torch.arange(W))
-        dist = torch.sqrt((a - H/2)**2 + (b - W/2)**2)
-        # dist = dist.repeat(B, 1, 1).to(x.device)
-        dist = dist.to(x.device)
-        max_radius = math.sqrt(H*H+W*W)/2
-
-       
-        x = torch.fft.fftn(x, dim=(-1,-2))
-        x = torch.fft.fftshift(x)
-        x_mag = torch.abs(x)
-        x_mag = torch.log10(x_mag + 1)
-
-        x_mag_max = torch.max(x_mag)
-        x_fq = x_mag / x_mag_max
-        y = self.conv1(x_mag)
-        y = self.relu(y)
-        y = self.down1(y)
-        y = self.conv2(y)
-        y = self.relu(y)
-        y = self.down2(y)
-        y = self.conv3(y)
-        y = self.relu(y)
-        y = self.down3(y)
-    
-        y = self.avgpool(y)
-        y = y.squeeze(-1)
-        y = y.squeeze(-1)
-
-        # print(y.size())
-
-        # radius_factor_set = self.sig(self.fclayer_r2(self.fclayer_r1(y)))
-        value_set =  self.sig(self.fclayer_v2(self.fclayer_v1(y)))
-        # value_set =  self.relu(self.fclayer_v2(self.fclayer_v1(y)))
-        # value_set =  self.fclayer_v2(self.fclayer_v1(y))
-        value_set = torch.mean(value_set, dim=0)
-        # print(value_set)
-        value_set = value_set / self.temp
-        value_set = self.soft(value_set)
-        value_set = value_set[:4]
-        # print(value_set)
-     
-        
-        radius_set = max_radius*self.radius_factor_set
-
-        # mask = [torch.sigmoid(radius_set[0].to(x.device) - dist.to(x.device)) * value_set_sum[0]]
-        mask = []
-        for i in range(4):
-            mask.append(torch.sigmoid(radius_set[i].to(x.device) - dist.to(x.device)) * value_set[i])
-        
-        fq_mask = torch.sum(torch.stack(mask, dim=0), dim=0)
-   
-
-        # x = torch.fft.fftn(x, dim=(-1,-2))
-        # x = torch.fft.fftshift(x)
-        lowpass = (x*fq_mask)
-
-        lowpass = torch.fft.ifftshift(lowpass)
-
-        lowpass = torch.fft.ifftn(lowpass, dim=(-1,-2))
-
-        lowpass = torch.abs(lowpass)
-        # lowpass = lowpass.real
-
-        return lowpass, fq_mask, self.radius_factor_set, value_set, x_fq
 
 
 class Highpassfilter(nn.Module):
@@ -289,6 +257,7 @@ class DNCNN_filter(nn.Module):
         # norm_layer = nn.BatchNorm2d
 
         self.depth = depth
+        self.replace = Random_frequency_replacing()
 
 
         self.first_layer = nn.Conv2d(in_channels=3, out_channels=n_channels, kernel_size=kernel_size, padding=padding, bias=self.bias)
@@ -323,7 +292,7 @@ class DNCNN_filter(nn.Module):
     def build_model(cls, args):
         return cls(image_channels = args.in_channels, n_channels = args.hidden_size, depth = args.num_layers, bias=args.bias)
 
-    def forward(self, x):
+    def forward(self, x, swap='false', feature=None):
         y = x
         # x = self.filter(x)[0]
         # x = self.filter(x)
@@ -337,6 +306,9 @@ class DNCNN_filter(nn.Module):
             out = F.relu(out)
             if i == 8 :
                 img = self.feautre_to_img1(out)
+                if swap =='true':
+                    out = self.replace(out,feature)
+
             # elif i == 8 :
             #     img = self.feautre_to_img2(out)
             # elif i == 13 :
@@ -344,7 +316,7 @@ class DNCNN_filter(nn.Module):
 
         out = self.last_layer(out)
         
-        return y-out
+        return torch.clamp(y-out, 0, 1)
 
     def _initialize_weights(self):
         for m in self.modules():

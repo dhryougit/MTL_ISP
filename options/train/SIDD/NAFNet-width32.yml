@@ -5,18 +5,19 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet-SIDD-width32-ffttest
+name: NAFNet32-small-pgd-lfaug-bf-probabilityfacotr1
+# name: xxx
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 2
+num_gpu: 4
 manual_seed: 10
 
 datasets:
   train:
     name: SIDD
     type: PairedImageDataset
-    dataroot_gt: /data/sidd/train/gt_crops.lmdb
-    dataroot_lq: /data/sidd/train/input_crops.lmdb
+    dataroot_gt: /131_data/datasets/sidd/train/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/train/input_crops.lmdb
 
     filename_tmpl: '{}'
     io_backend:
@@ -28,16 +29,16 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 4
-    batch_size_per_gpu: 16
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 8
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
     name: SIDD_val
     type: PairedImageDataset
-    dataroot_gt: /data/sidd/SIDD/val/gt_crops.lmdb
-    dataroot_lq: /data/sidd/SIDD/val/input_crops.lmdb
+    dataroot_gt: /131_data/datasets/sidd/SIDD/val/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/SIDD/val/input_crops.lmdb
     io_backend:
       type: lmdb
 
@@ -45,30 +46,39 @@ datasets:
 network_g:
   type: NAFNet
   width: 32
-  enc_blk_nums: [2, 2, 4, 8]
-  middle_blk_num: 12
+  enc_blk_nums: [2, 2, 2, 2]
+  middle_blk_num: 2
   dec_blk_nums: [2, 2, 2, 2]
 
 # path
 path:
+  # pretrain_network_g: ./finetuned_models/NAFNet-SIDD-width64.pth
+  # advtrained_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
+  # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
+  # pretrain_network_g: ./finetuned_models/NAFNet-weight64-advtrained.pth
+  # pretrain_network_g: ./finetuned_models/adv-training.pth
+  # pretrain_network_g: ./finetuned_models/adv-training.pth
+  # pretrain_network_g: ./finetuned_models/net_g_300000.pth
   pretrain_network_g: ~
-  strict_load_g: true
+  # strict_load_g: true
+  strict_load_g: False
   resume_state: ~
+  root: '/131_data/dhryou/FF'
 
 # training settings
 train:
   optim_g:
     type: AdamW
-    lr: !!float 1e-3
+    lr: !!float 1e-4
     weight_decay: 0.
     betas: [0.9, 0.9]
 
   scheduler:
     type: TrueCosineAnnealingLR
-    T_max: 200000
+    T_max: 25000
     eta_min: !!float 1e-7
 
-  total_iter: 200000
+  total_iter: 25000
   warmup_iter: -1 # no warm up
 
   # losses
@@ -77,9 +87,16 @@ train:
     loss_weight: 1
     reduction: mean
 
+  adv: true
+  alpha: 0.5
+  filter: false
+  filter_rate : 0.3
+  fq_aug : true
+  feature : false
+
 # validation settings
 val:
-  val_freq: !!float 2e4
+  val_freq: !!float 2e3
   save_img: false
   use_image: false
 
@@ -99,8 +116,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    # project: test-project
-    project: ~
+    project: frequency-filtering-NAFNet
     resume_id: ~
 
 # dist training settings
