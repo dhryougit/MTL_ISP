@@ -482,43 +482,6 @@ class ImageRestorationModel(BaseModel):
         noise = self.genearte_poisson_noise()
         self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
 
-
-        # loss_dict = OrderedDict()
-        # self.optimizer_g_filter.zero_grad()
-        # preds = self.net_g(self.lq)
-
-        # for name, module in self.net_g.named_modules():
-        #     if name == 'module.filter':
-        #         x, mask, v_set = module.feature_map
-
-        # loss_filter = 0.
-        # loss_filter += self.cri_pix(preds, self.gt) + 0. * sum(p.sum() for p in self.net_g.parameters())
-        # # tmp = torch.ones_like(v_set)
-        # # loss_filter = self.mseloss(tmp, v_set) + 0. * sum(p.sum() for p in self.net_g.parameters())
-        # loss_dict['l_filter'] = loss_filter
-        # loss_filter.backward()
-        
-
-        # if (current_iter-1) % 200 == 0:
-        #     for name, module in self.net_g.named_modules():
-        #         if name == 'module.filter':
-        #             x, mask, v_set = module.feature_map
-        #     if v_set != None:
-        #         print(v_set[0])
-    
-        # self.optimizer_g_filter.step()
-
-        # else:
-            # n2n
-            # original_noise = self.lq
-            # new_noise = torch.clamp(self.lq+ noise.cuda(), 0, 1)
-
-
-
-            # n2s
-            # new_/input, mask = self.masker.mask(self.lq, current_iter)
-            # net_output = model(net_input)
-            
         
 
         if self.opt['train']['adv']:
@@ -536,7 +499,7 @@ class ImageRestorationModel(BaseModel):
     
         l_pix = 0.
         l_pix += self.cri_pix(preds, self.gt)
-        loss_dict['l_real'] = l_pix
+        loss_dict['l_poisson'] = l_pix
 
 
         if self.opt['train']['feature']:
