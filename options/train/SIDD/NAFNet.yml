@@ -5,8 +5,7 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: NAFNet32-small-pgd-lfaug-bf-probabilityfacotr1
-# name: xxx
+name: NAFNet-pretrained
 model_type: ImageRestorationModel
 scale: 1
 num_gpu: 4
@@ -16,8 +15,8 @@ datasets:
   train:
     name: SIDD
     type: PairedImageDataset
-    dataroot_gt: /131_data/datasets/sidd/train/gt_crops.lmdb
-    dataroot_lq: /131_data/datasets/sidd/train/input_crops.lmdb
+    dataroot_gt: /cvdata1/datasets/sidd/train/gt_crops.lmdb
+    dataroot_lq: /cvdata1/datasets/sidd/train/input_crops.lmdb
 
     filename_tmpl: '{}'
     io_backend:
@@ -29,39 +28,48 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 8
-    batch_size_per_gpu: 8
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
     name: SIDD_val
     type: PairedImageDataset
-    dataroot_gt: /131_data/datasets/sidd/SIDD/val/gt_crops.lmdb
-    dataroot_lq: /131_data/datasets/sidd/SIDD/val/input_crops.lmdb
+    dataroot_gt: /cvdata1/datasets/sidd/SIDD/val/gt_crops.lmdb
+    dataroot_lq: /cvdata1/datasets/sidd/SIDD/val/input_crops.lmdb
     io_backend:
       type: lmdb
 
+  val_CC:
+    name: CC
+    type: PairedImageDataset
+    dataroot_gt: /cvdata1/datasets/CC/gt_256
+    dataroot_lq: /cvdata1/datasets/CC/input_256
+    io_backend:
+      type: disk
+  
+  val_Poly:
+    name: PolyU
+    type: PairedImageDataset
+    dataroot_gt: /cvdata1/datasets/PolyU/gt_256
+    dataroot_lq: /cvdata1/datasets/PolyU/input_256
+    io_backend:
+      type: disk
+
 
 network_g:
-  type: NAFNet
-  width: 32
-  enc_blk_nums: [2, 2, 2, 2]
-  middle_blk_num: 2
+  type: NAFNet_filter
+  width: 64
+  enc_blk_nums: [2, 2, 4, 8]
+  middle_blk_num: 12
   dec_blk_nums: [2, 2, 2, 2]
 
 # path
 path:
-  # pretrain_network_g: ./finetuned_models/NAFNet-SIDD-width64.pth
-  # advtrained_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
-  # pretrain_network_g: /131_data/dhryou/NAFNet/experiments/NAFNet-width64-adversarial-training/models/
-  # pretrain_network_g: ./finetuned_models/NAFNet-weight64-advtrained.pth
-  # pretrain_network_g: ./finetuned_models/adv-training.pth
-  # pretrain_network_g: ./finetuned_models/adv-training.pth
-  # pretrain_network_g: ./finetuned_models/net_g_300000.pth
-  pretrain_network_g: ~
-  # strict_load_g: true
-  strict_load_g: False
+  pretrain_network_g: '/131_data/dhryou/finetuned_models/NAFNet-SIDD-width64.pth'
+  # pretrain_network_g: ~
+  strict_load_g: false
   resume_state: ~
   root: '/131_data/dhryou/FF'
 
@@ -73,13 +81,19 @@ train:
     weight_decay: 0.
     betas: [0.9, 0.9]
 
+  optim_g2:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.9]
+
   scheduler:
     type: TrueCosineAnnealingLR
     T_max: 25000
-    eta_min: !!float 1e-7
+    eta_min: !!float 1e-6
 
   total_iter: 25000
-  warmup_iter: -1 # no warm up
+  warmup_iter: -1 # no warm ups
 
   # losses
   pixel_opt:
@@ -87,16 +101,24 @@ train:
     loss_weight: 1
     reduction: mean
 
-  adv: true
-  alpha: 0.5
+  synthetic: true
+  synthetic_type: gaussian
+  adv: false
+  alpha: 0.7
   filter: false
   filter_rate : 0.3
-  fq_aug : true
+  fq_aug : false
+  fbr_param : 0.5
+  fbr_mode : linear
   feature : false
+
+  perturb:
+    alpha: 5
+    iter: 1
 
 # validation settings
 val:
-  val_freq: !!float 2e3
+  val_freq: 2000
   save_img: false
   use_image: false
 
@@ -113,13 +135,15 @@ val:
 # logging settings
 logger:
   print_freq: 200
-  save_checkpoint_freq: !!float 5e3
+  save_checkpoint_freq: 5000
   use_tb_logger: true
   wandb:
-    project: frequency-filtering-NAFNet
+    # project: test-project
+    project: NAFNet-general
     resume_id: ~
 
 # dist training settings
 dist_params:
   backend: nccl
   port: 29500
+

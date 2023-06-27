@@ -5,18 +5,18 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 # general settings
-name: DNCNN-real
+name: NAFNet-denoise-to-deblur
 model_type: ImageRestorationModel
 scale: 1
-num_gpu: 1
+num_gpu: 4
 manual_seed: 10
 
 datasets:
   train:
-    name: SIDD
+    name: gopro-train
     type: PairedImageDataset
-    dataroot_gt: /cvdata1/datasets/sidd/train/gt_crops.lmdb
-    dataroot_lq: /cvdata1/datasets/sidd/train/input_crops.lmdb
+    dataroot_gt: /cvdata1/datasets/GoPro/train/sharp_crops.lmdb
+    dataroot_lq: /cvdata1/datasets/GoPro/train/blur_crops.lmdb
 
     filename_tmpl: '{}'
     io_backend:
@@ -29,7 +29,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 64
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -41,44 +41,52 @@ datasets:
     io_backend:
       type: lmdb
 
-  val_CC:
-    name: CC
+  val_gopro:
+    name: gopro-test
     type: PairedImageDataset
-    dataroot_gt: /cvdata1/datasets/CC/gt_256
-    dataroot_lq: /cvdata1/datasets/CC/input_256
+    dataroot_gt: /cvdata1/datasets/GoPro/test/target.lmdb
+    dataroot_lq: /cvdata1/datasets/GoPro/test/input.lmdb
     io_backend:
-      type: disk
+      type: lmdb
+
+  # val_CC:
+  #   name: CC
+  #   type: PairedImageDataset
+  #   dataroot_gt: /cvdata1/datasets/CC/gt_256
+  #   dataroot_lq: /cvdata1/datasets/CC/input_256
+  #   io_backend:
+  #     type: disk
   
-  val_Poly:
-    name: PolyU
-    type: PairedImageDataset
-    dataroot_gt: /cvdata1/datasets/PolyU/gt_256
-    dataroot_lq: /cvdata1/datasets/PolyU/input_256
-    io_backend:
-      type: disk
+  # val_Poly:
+  #   name: PolyU
+  #   type: PairedImageDataset
+  #   dataroot_gt: /cvdata1/datasets/PolyU/gt_256
+  #   dataroot_lq: /cvdata1/datasets/PolyU/input_256
+  #   io_backend:
+  #     type: disk
 
 
 network_g:
-  type: DNCNN_filter
-  # width: 16
-  # enc_blk_nums: [2, 2, 2, 2]
-  # middle_blk_num: 2
-  # dec_blk_nums: [2, 2, 2, 2]
+  type: NAFNet
+  width: 64
+  enc_blk_nums: [2, 2, 4, 8]
+  middle_blk_num: 12
+  dec_blk_nums: [2, 2, 2, 2]
 
 # path
 path:
-  # pretrain_network_g: '/131_data/dhryou/FF/experiments/DNCNN-pgd-16-FBR-low-0.5/models/net_g_latest.pth'
-  pretrain_network_g: ~
+  pretrain_network_g: '/131_data/dhryou/finetuned_models/NAFNet-SIDD-width64.pth'
+  # pretrain_network_g: ~
   strict_load_g: false
   resume_state: ~
-  root: '/131_data/dhryou/FF'
+  root: '/131_data/dhryou/multitask'
 
 # training settings
 train:
   optim_g:
     type: AdamW
-    lr: !!float 1e-4
-    weight_decay: 0.
+    lr: !!float 1e-3
+    weight_decay: !!float 1e-3
     betas: [0.9, 0.9]
 
   optim_g2:
@@ -89,10 +97,10 @@ train:
 
   scheduler:
     type: TrueCosineAnnealingLR
-    T_max: 25000
-    eta_min: !!float 1e-6
+    T_max: 400000
+    eta_min: !!float 1e-7
 
-  total_iter: 25000
+  total_iter: 400000
   warmup_iter: -1 # no warm ups
 
   # losses
@@ -102,23 +110,23 @@ train:
     reduction: mean
 
   synthetic: false
-  synthetic_type: ~
+  synthetic_type: gaussian
   adv: false
-  alpha: 0.9
+  alpha: 0.7
   filter: false
   filter_rate : 0.3
   fq_aug : false
-  feature : false
   fbr_param : 0.5
   fbr_mode : linear
+  feature : false
 
   perturb:
-    alpha: 16
+    alpha: 5
     iter: 1
 
 # validation settings
 val:
-  val_freq: 2000
+  val_freq: 5000
   save_img: false
   use_image: false
 
@@ -134,15 +142,16 @@ val:
 
 # logging settings
 logger:
-  print_freq: 200
-  save_checkpoint_freq: 5000
+  print_freq: 500
+  save_checkpoint_freq: 10000
   use_tb_logger: true
   wandb:
     # project: test-project
-    project: DNCNN-poisson
+    project: NAFNet-multitask
     resume_id: ~
 
 # dist training settings
 dist_params:
   backend: nccl
   port: 29500
+

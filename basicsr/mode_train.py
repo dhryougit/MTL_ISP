@@ -99,7 +99,7 @@ def init_loggers(opt):
 
 def create_train_val_dataloader(opt, logger):
     # create train and val dataloaders
-    train_loader, val_loader, val_loader_CC, val_loader_Poly = None, None
+    train_loader, val_loader, val_loader_CC, val_loader_Poly = None, None, None, None
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train':
             dataset_enlarge_ratio = dataset_opt.get('dataset_enlarge_ratio', 1)
@@ -141,9 +141,9 @@ def create_train_val_dataloader(opt, logger):
                 f'Number of val images/folders in {dataset_opt["name"]}: '
                 f'{len(val_set)}')
 
-        elif phase == 'val_CC':
-            val_set_CC = create_dataset(dataset_opt)
-            val_loader_CC = create_dataloader(
+        elif phase == 'val_gopro':
+            val_set = create_dataset(dataset_opt)
+            val_loader_gopro = create_dataloader(
                 val_set,
                 dataset_opt,
                 num_gpu=opt['num_gpu'],
@@ -154,22 +154,35 @@ def create_train_val_dataloader(opt, logger):
                 f'Number of val images/folders in {dataset_opt["name"]}: '
                 f'{len(val_set)}')
 
-        elif phase == 'val_Poly':
-            val_set_Poly = create_dataset(dataset_opt)
-            val_loader_Poly = create_dataloader(
-                val_set,
-                dataset_opt,
-                num_gpu=opt['num_gpu'],
-                dist=opt['dist'],
-                sampler=None,
-                seed=opt['manual_seed'])
-            logger.info(
-                f'Number of val images/folders in {dataset_opt["name"]}: '
-                f'{len(val_set)}')
+        # elif phase == 'val_CC':
+        #     val_set = create_dataset(dataset_opt)
+        #     val_loader_CC = create_dataloader(
+        #         val_set,
+        #         dataset_opt,
+        #         num_gpu=opt['num_gpu'],
+        #         dist=opt['dist'],
+        #         sampler=None,
+        #         seed=opt['manual_seed'])
+        #     logger.info(
+        #         f'Number of val images/folders in {dataset_opt["name"]}: '
+        #         f'{len(val_set)}')
+
+        # elif phase == 'val_Poly':
+        #     val_set = create_dataset(dataset_opt)
+        #     val_loader_Poly = create_dataloader(
+        #         val_set,
+        #         dataset_opt,
+        #         num_gpu=opt['num_gpu'],
+        #         dist=opt['dist'],
+        #         sampler=None,
+        #         seed=opt['manual_seed'])
+        #     logger.info(
+        #         f'Number of val images/folders in {dataset_opt["name"]}: '
+        #         f'{len(val_set)}')
         else:
             raise ValueError(f'Dataset phase {phase} is not recognized.')
 
-    return train_loader, train_sampler, val_loader, val_loader_CC, val_loader_Poly, total_epochs, total_iters
+    return train_loader, train_sampler, val_loader, val_loader_gopro, total_epochs, total_iters
 
 
 def main():
@@ -215,7 +228,7 @@ def main():
 
     # create train and validation dataloaders
     result = create_train_val_dataloader(opt, logger)
-    train_loader, train_sampler, val_loader, val_loader_CC, val_loader_Poly, total_epochs, total_iters = result
+    train_loader, train_sampler, val_loader, val_loader_gopro, total_epochs, total_iters = result
 
     # create model
     if resume_state:  # resume training
@@ -258,22 +271,35 @@ def main():
     # for epoch in range(start_epoch, total_epochs + 1):
     epoch = start_epoch
 
-    # modes = ['real', 'seen_noise', 'unseen_noise']
-    # for mode in modes:
-    #     model.change_test_mode(mode)
-    #     if opt.get('val') is not None and (current_iter == 0):
-    #         rgb2bgr = opt['val'].get('rgb2bgr', True)
-    #         # wheather use uint8 image to compute metrics
-    #         use_image = opt['val'].get('use_image', True)
-    #         model.validation(val_loader, current_iter, tb_logger,
-    #                             opt['val']['save_img'], rgb2bgr, use_image )
-    #         log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
-    #         log_vars.update({'lrs': model.get_current_learning_rate()})
-    #         log_vars.update(model.get_current_log())
+    modes = ['Sidd', 'gopro']
+    # modes = ['ori', 'noise']
+    for mode in modes:
+        model.change_test_mode(mode)
+        prune_rate = model.get_prune_rate()
+        rgb2bgr = opt['val'].get('rgb2bgr', True)
+        # wheather use uint8 image to compute metrics
+        use_image = opt['val'].get('use_image', True)
+        if mode == 'Sidd':        
+            model.validation(val_loader, current_iter, tb_logger,
+                                opt['val']['save_img'], rgb2bgr, use_image )
+        elif mode == 'gopro':  
+            model.validation(val_loader_gopro, current_iter, tb_logger,
+                                opt['val']['save_img'], rgb2bgr, use_image )  
+        # elif mode == 'Poly':  
+        #     model.validation(val_loader_Poly, current_iter, tb_logger,
+        #                         opt['val']['save_img'], rgb2bgr, use_image ) 
+        # elif mode == 'gaussian':        
+        #     model.validation(val_loader, current_iter, tb_logger,
+        #                         opt['val']['save_img'], rgb2bgr, use_image )
 
-    #         prune_rate = model.get_prune_rate()
-    #         if opt['rank'] == 0:
-    #             msg_logger(log_vars, prune_rate)
+        log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
+        log_vars.update({'lrs': model.get_current_learning_rate()})
+        log_vars.update(model.get_current_log())
+        if opt['rank'] == 0:
+            # radius = model.get_radius_set()
+            radius = None
+            # radius = a.data.item()
+            msg_logger(log_vars, radius)
 
 
     while current_iter <= total_iters:
@@ -306,7 +332,7 @@ def main():
 
             # if current_iter % opt['logger']['print_freq'] == 0:
 
-            if current_iter % 50 == 0:
+            if current_iter % opt['logger']['print_freq'] == 0:
                 log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
                 log_vars.update({'lrs': model.get_current_learning_rate()})
                 log_vars.update({'time': iter_time, 'data_time': data_time})
@@ -326,17 +352,16 @@ def main():
                 # msg_logger(log_vars, prune_rate)
            
             
-            if current_iter % 2000 == 0:
+            if current_iter % opt['logger']['save_checkpoint_freq'] == 0:
                 logger.info('Saving models and training states.')
                 model.save(epoch, current_iter)
 
       
             # every 2 iteration validsion
-            if (current_iter % 500 == 0) : 
+            if (current_iter % opt['val']['val_freq'] == 0) : 
                 # modes = ['ori', 'adv', 'noise']
                 # modes = ['real', 'adv', 'seen_noise', 'unseen_noise']
-                modes = ['Sidd', 'CC', 'Poly']
-                    
+                modes = ['Sidd', 'gopro']
                 # modes = ['ori', 'noise']
                 for mode in modes:
                     model.change_test_mode(mode)
@@ -347,12 +372,12 @@ def main():
                     if mode == 'Sidd':        
                         model.validation(val_loader, current_iter, tb_logger,
                                             opt['val']['save_img'], rgb2bgr, use_image )
-                    elif mode == 'CC':  
-                        model.validation(val_loader_CC, current_iter, tb_logger,
+                    elif mode == 'gopro':  
+                        model.validation(val_loader_gopro, current_iter, tb_logger,
                                             opt['val']['save_img'], rgb2bgr, use_image )  
-                    elif mode == 'Poly':  
-                        model.validation(val_loader_Poly, current_iter, tb_logger,
-                                            opt['val']['save_img'], rgb2bgr, use_image ) 
+                    # elif mode == 'Poly':  
+                    #     model.validation(val_loader_Poly, current_iter, tb_logger,
+                    #                         opt['val']['save_img'], rgb2bgr, use_image ) 
 
                     log_vars = {'epoch': epoch, 'iter': current_iter, 'total_iter': total_iters}
                     log_vars.update({'lrs': model.get_current_learning_rate()})
