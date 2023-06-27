@@ -336,6 +336,7 @@ def main():
                 # modes = ['ori', 'adv', 'noise']
                 # modes = ['real', 'adv', 'seen_noise', 'unseen_noise']
                 modes = ['Sidd', 'CC', 'Poly']
+                    
                 # modes = ['ori', 'noise']
                 for mode in modes:
                     model.change_test_mode(mode)
