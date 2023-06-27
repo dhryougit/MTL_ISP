@@ -431,6 +431,7 @@ class ImageRestorationModel(BaseModel):
 
                 # x_gpd = x_pgd + torch.sign(grad) * alpha.view(-1,1,1,1)
                 x_pgd = x_pgd + alpha * torch.sign(grad)
+                # x_pgd = x_pgd + torch.clamp(grad, -(16/255), (16/255))
                 x_pgd = torch.min(torch.max(x_pgd, x - epsilon), x + epsilon)
                 x_pgd = torch.clamp(x_pgd, 0, 1)
                 # x_pgd = torch.clamp(x_pgd + grad, 0, 1)
@@ -478,9 +479,13 @@ class ImageRestorationModel(BaseModel):
 
     def optimize_parameters(self, current_iter, tb_logger):
         
-        
-        noise = self.genearte_poisson_noise()
-        self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
+        if self.opt['train']['synthetic']:
+            if self.opt['train']['synthetic_type'] == 'poisson':
+                noise = self.genearte_poisson_noise()
+            else : 
+                noise = self.genearte_gaussian_noise()
+                
+            self.lq = torch.clamp(self.gt+ noise.cuda(), 0, 1)
 
         
 
@@ -499,7 +504,7 @@ class ImageRestorationModel(BaseModel):
     
         l_pix = 0.
         l_pix += self.cri_pix(preds, self.gt)
-        loss_dict['l_poisson'] = l_pix
+        loss_dict['l_lq'] = l_pix
 
 
         if self.opt['train']['feature']:
@@ -518,7 +523,7 @@ class ImageRestorationModel(BaseModel):
             preds_replaced = self.net_g(fq_replaced)
             l_pix_replaced = 0.
             l_pix_replaced += self.cri_pix(preds_replaced, self.gt)
-            loss_dict['l_real_replaced'] = l_pix_replaced
+            loss_dict['l_lq_replaced'] = l_pix_replaced
 
             if self.opt['train']['feature']:
                 for name, module in self.net_g.named_modules():
@@ -583,7 +588,10 @@ class ImageRestorationModel(BaseModel):
             else:
                 l_total = loss_adv + 0. * sum(p.sum() for p in self.net_g.parameters())
         else : 
-            l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
+            if self.opt['train']['fq_aug']:
+                l_total =  l_pix + l_pix_replaced  + 0. * sum(p.sum() for p in self.net_g.parameters())
+            else:
+                l_total = l_pix + 0. * sum(p.sum() for p in self.net_g.parameters())
 
         # loss_adv = ( l_pix * 1./(1+self.alpha) + l_adv * self.alpha/(1+self.alpha) ) 
         # loss_adv_replaced = ( l_pix_replaced * 1./(1+self.alpha) + l_adv_replaced * self.alpha/(1+self.alpha) ) 
@@ -596,7 +604,7 @@ class ImageRestorationModel(BaseModel):
         if use_grad_clip:
             torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), 0.01)
         self.optimizer_g.step()
-        # self.optimizer_g_filter.step()
+        self.optimizer_g_filter.step()
 
         # replacement
 
@@ -636,7 +644,7 @@ class ImageRestorationModel(BaseModel):
             self.lq = self.lq
         elif self.test_mode == 'adv':
             self.lq = self.pgd_attack(self.net_g, self.gt, self.gt)
-        elif self.test_mode =='seen':
+        elif self.test_mode =='gaussian':
   
             B,C,H,W = self.lq.size()
             random_noise = torch.randn(B,C,H,W).cuda()
