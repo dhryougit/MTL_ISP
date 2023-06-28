@@ -421,8 +421,6 @@ class ImageRestorationModel(BaseModel):
         
             # alpha = (torch.rand(B) * 16) * 1./255
             # alpha = alpha.cuda()
-         
-    
             
             # Add perturbation to the input
             with torch.no_grad():

@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 # from models.utils import weights_init_kaiming
 
-class DNCNN(nn.Module):
+class DnCNN(nn.Module):
     def __init__(self, depth=20, n_filters=64, kernel_size=3, img_channels=3):
         """Pytorch implementation of DnCNN.
         Parameters
@@ -25,7 +25,7 @@ class DNCNN(nn.Module):
         >>> dncnn_s = DnCNN(depth=17)
         >>> dncnn_b = DnCNN(depth=20)
         """
-        super(DNCNN, self).__init__()
+        super(DnCNN, self).__init__()
         layers = [
             nn.Conv2d(in_channels=img_channels, out_channels=n_filters, kernel_size=kernel_size,
                       padding=1, bias=False),
@@ -34,7 +34,7 @@ class DNCNN(nn.Module):
         for _ in range(depth-2):
             layers.append(nn.Conv2d(in_channels=n_filters, out_channels=n_filters, kernel_size=kernel_size,
                                     padding=1, bias=False))
-            # layers.append(nn.BatchNorm2d(n_filters))
+            layers.append(nn.BatchNorm2d(n_filters))
             layers.append(nn.ReLU(inplace=True))
         layers.append(nn.Conv2d(in_channels=n_filters, out_channels=img_channels, kernel_size=kernel_size,
                                 padding=1, bias=False))
@@ -60,21 +60,21 @@ class DNCNN(nn.Module):
     #     print('initializing DnCNN via Kaiming-init...')
     
 def DnCNN_BW():
-    return DNCNN(img_channels=1)
+    return DnCNN(img_channels=1)
 
 def DnCNN_BW10():
-    return DNCNN(depth=10, img_channels=1)
+    return DnCNN(depth=10, img_channels=1)
 
 def DnCNN_BW6():
-    return DNCNN(depth=6, img_channels=1)
+    return DnCNN(depth=6, img_channels=1)
 
 
 def DnCNN_RGB():
-    return DNCNN(img_channels=3)
+    return DnCNN(img_channels=3)
     
     
 if __name__ == '__main__':
-    model = DNCNN(depth=6)
+    model = DnCNN(depth=6)
     input = torch.rand((1, 1, 100, 100))
     output = model(input)
     print(output.shape)
