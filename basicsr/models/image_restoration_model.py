@@ -266,6 +266,11 @@ class ImageRestorationModel(BaseModel):
             gt_gopro = data_gopro['lq'].to(self.device)
             self.gt = torch.concat([gt_sidd, gt_gopro], dim=0)
 
+    def feed_data_val(self, data, is_val=False):
+        self.lq = data['lq'].to(self.device)
+        if 'gt' in data:
+            self.gt = data['gt'].to(self.device)
+
     def grids(self):
         b, c, h, w = self.gt.size()
         self.original_size = (b, c, h, w)
@@ -704,7 +709,7 @@ class ImageRestorationModel(BaseModel):
 
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
 
-            self.feed_data(val_data, is_val=True)
+            self.feed_data_val(val_data, is_val=True)
             if self.opt['val'].get('grids', False):
                 self.grids()
 
