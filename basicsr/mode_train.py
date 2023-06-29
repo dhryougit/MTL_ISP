@@ -99,7 +99,7 @@ def init_loggers(opt):
 
 def create_train_val_dataloader(opt, logger):
     # create train and val dataloaders
-    train_loader, val_loader, val_loader_CC, val_loader_Poly = None, None, None, None
+    train_loader, val_loader, val_loader_gopro, val_loader_CC, val_loader_Poly = None, None, None, None
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train':
             dataset_enlarge_ratio = dataset_opt.get('dataset_enlarge_ratio', 1)
