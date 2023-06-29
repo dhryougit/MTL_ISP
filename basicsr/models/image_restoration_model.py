@@ -257,10 +257,14 @@ class ImageRestorationModel(BaseModel):
         self.optimizers.append(self.optimizer_g)
         self.optimizers.append(self.optimizer_g_filter)
 
-    def feed_data(self, data, is_val=False):
-        self.lq = data['lq'].to(self.device)
-        if 'gt' in data:
-            self.gt = data['gt'].to(self.device)
+    def feed_data(self, data_sidd, data_gopro, is_val=False):
+        lq_sidd = data_sidd['lq'].to(self.device)
+        lq_gopro = data_gopro['lq'].to(self.device)
+        self.lq = torch.concat([lq_sidd, lq_gopro], dim=0)
+        if 'gt' in data_sidd:
+            gt_sidd = data_sidd['lq'].to(self.device)
+            gt_gopro = data_gopro['lq'].to(self.device)
+            self.gt = torch.concat([gt_sidd, gt_gopro], dim=0)
 
     def grids(self):
         b, c, h, w = self.gt.size()

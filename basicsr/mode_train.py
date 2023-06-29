@@ -99,19 +99,46 @@ def init_loggers(opt):
 
 def create_train_val_dataloader(opt, logger):
     # create train and val dataloaders
-    train_loader, val_loader, val_loader_gopro, val_loader_CC, val_loader_Poly = None, None, None, None
+    train_loader_sidd, train_loader_gopro, val_loader, val_loader_gopro, val_loader_CC, val_loader_Poly = None, None, None, None
     for phase, dataset_opt in opt['datasets'].items():
-        if phase == 'train':
+        if phase == 'train_sidd':
             dataset_enlarge_ratio = dataset_opt.get('dataset_enlarge_ratio', 1)
             train_set = create_dataset(dataset_opt)
-            train_sampler = EnlargedSampler(train_set, opt['world_size'],
+            train_sampler_sidd = EnlargedSampler(train_set, opt['world_size'],
                                             opt['rank'], dataset_enlarge_ratio)
-            train_loader = create_dataloader(
+            train_loader_sidd = create_dataloader(
                 train_set,
                 dataset_opt,
                 num_gpu=opt['num_gpu'],
                 dist=opt['dist'],
-                sampler=train_sampler,
+                sampler=train_sampler_sidd,
+                seed=opt['manual_seed'])
+
+            num_iter_per_epoch = math.ceil(
+                len(train_set) * dataset_enlarge_ratio /
+                (dataset_opt['batch_size_per_gpu'] * opt['world_size']))
+            total_iters = int(opt['train']['total_iter'])
+            total_epochs = math.ceil(total_iters / (num_iter_per_epoch))
+            logger.info(
+                'Training statistics:'
+                f'\n\tNumber of train images: {len(train_set)}'
+                f'\n\tDataset enlarge ratio: {dataset_enlarge_ratio}'
+                f'\n\tBatch size per gpu: {dataset_opt["batch_size_per_gpu"]}'
+                f'\n\tWorld size (gpu number): {opt["world_size"]}'
+                f'\n\tRequire iter number per epoch: {num_iter_per_epoch}'
+                f'\n\tTotal epochs: {total_epochs}; iters: {total_iters}.')
+
+        elif phase == 'train_gopro':
+            dataset_enlarge_ratio = dataset_opt.get('dataset_enlarge_ratio', 1)
+            train_set = create_dataset(dataset_opt)
+            train_sampler_gopro = EnlargedSampler(train_set, opt['world_size'],
+                                            opt['rank'], dataset_enlarge_ratio)
+            train_loader_gopro = create_dataloader(
+                train_set,
+                dataset_opt,
+                num_gpu=opt['num_gpu'],
+                dist=opt['dist'],
+                sampler=train_sampler_gopro,
                 seed=opt['manual_seed'])
 
             num_iter_per_epoch = math.ceil(
@@ -182,7 +209,7 @@ def create_train_val_dataloader(opt, logger):
         else:
             raise ValueError(f'Dataset phase {phase} is not recognized.')
 
-    return train_loader, train_sampler, val_loader, val_loader_gopro, total_epochs, total_iters
+    return train_loader_sidd, train_loader_gopro, train_sampler_sidd, train_sampler_gopro, val_loader, val_loader_gopro, total_epochs, total_iters
 
 
 def main():
@@ -228,7 +255,7 @@ def main():
 
     # create train and validation dataloaders
     result = create_train_val_dataloader(opt, logger)
-    train_loader, train_sampler, val_loader, val_loader_gopro, total_epochs, total_iters = result
+    train_loader_sidd, train_loader_gopro, train_sampler_sidd, train_sampler_gopro, val_loader, val_loader_gopro, total_epochs, total_iters = result
 
     # create model
     if resume_state:  # resume training
@@ -250,9 +277,11 @@ def main():
     msg_logger = MessageLogger(opt, current_iter, tb_logger)
 
     # dataloader prefetcher
-    prefetch_mode = opt['datasets']['train'].get('prefetch_mode')
+    # prefetch_mode = opt['datasets']['train'].get('prefetch_mode')
+    prefetch_mode = None
     if prefetch_mode is None or prefetch_mode == 'cpu':
-        prefetcher = CPUPrefetcher(train_loader)
+        prefetcher_sidd = CPUPrefetcher(train_loader_sidd)
+        prefetcher_gopro = CPUPrefetcher(train_loader_gopro)
     elif prefetch_mode == 'cuda':
         prefetcher = CUDAPrefetcher(train_loader, opt)
         logger.info(f'Use {prefetch_mode} prefetch dataloader')
@@ -303,11 +332,21 @@ def main():
 
 
     while current_iter <= total_iters:
-        train_sampler.set_epoch(epoch)
-        prefetcher.reset()
-        train_data = prefetcher.next()
+        train_sampler_sidd.set_epoch(epoch)
+        # train_sampler_gopro.set_epoch(epoch)
+        prefetcher_sidd.reset()
+        # prefetcher_gopro.reset()
+        train_data_sidd = prefetcher_sidd.next()
+        # train_data_gopro = prefetcher_gopro.next()
 
-        while train_data is not None:
+
+        while train_data_sidd is not None:
+            if train_data_gopro == None:
+                train_sampler_gopro.set_epoch(epoch)
+                prefetcher_gopro.reset()
+                train_data_gopro = prefetcher_gopro.next()
+
+
             data_time = time.time() - data_time
 
             current_iter += 1
@@ -318,7 +357,7 @@ def main():
                 current_iter, warmup_iter=opt['train'].get('warmup_iter', -1))
             # training
 
-            model.feed_data(train_data, is_val=False)
+            model.feed_data(train_data_sidd, train_data_gopro, is_val=False)
 
     
             result_code = model.optimize_parameters(current_iter, tb_logger)
@@ -403,7 +442,8 @@ def main():
 
             data_time = time.time()
             iter_time = time.time()
-            train_data = prefetcher.next()
+            train_data_sidd = prefetcher_sidd.next()
+            train_data_gopro = prefetcher_gopro.next()
         # end of iter
         epoch += 1
 

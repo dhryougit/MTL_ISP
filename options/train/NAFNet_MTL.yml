@@ -1,0 +1,178 @@
+# ------------------------------------------------------------------------
+# Copyright (c) 2022 megvii-model. All Rights Reserved.
+# ------------------------------------------------------------------------
+# Modified from BasicSR (https://github.com/xinntao/BasicSR)
+# Copyright 2018-2020 BasicSR Authors
+# ------------------------------------------------------------------------
+# general settings
+name: NAFNet-MTL
+model_type: ImageRestorationModel
+scale: 1
+num_gpu: 4
+manual_seed: 10
+
+datasets:
+  train_gopro:
+    name: gopro-train
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/GoPro/train/sharp_crops.lmdb
+    dataroot_lq: /131_data/datasets/GoPro/train/blur_crops.lmdb
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: lmdb
+
+    gt_size: 256
+    use_flip: false
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 8
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  train_sidd:
+    name: SIDD
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/sidd/train/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/train/input_crops.lmdb
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: lmdb
+
+    gt_size: 256
+    use_flip: false
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 4
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: SIDD_val
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/sidd/SIDD/val/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/SIDD/val/input_crops.lmdb
+    io_backend:
+      type: lmdb
+
+  val_gopro:
+    name: gopro-test
+    type: PairedImageDataset
+    dataroot_gt: /cvdata1/datasets/GoPro/test/target.lmdb
+    dataroot_lq: /cvdata1/datasets/GoPro/test/input.lmdb
+    io_backend:
+      type: lmdb
+
+  # val_CC:
+  #   name: CC
+  #   type: PairedImageDataset
+  #   dataroot_gt: /cvdata1/datasets/CC/gt_256
+  #   dataroot_lq: /cvdata1/datasets/CC/input_256
+  #   io_backend:
+  #     type: disk
+  
+  # val_Poly:
+  #   name: PolyU
+  #   type: PairedImageDataset
+  #   dataroot_gt: /cvdata1/datasets/PolyU/gt_256
+  #   dataroot_lq: /cvdata1/datasets/PolyU/input_256
+  #   io_backend:
+  #     type: disk
+
+
+network_g:
+  type: NAFNet
+  width: 32
+  enc_blk_nums: [2, 2, 2, 2]
+  middle_blk_num: 2
+  dec_blk_nums: [2, 2, 2, 2]
+
+# path
+path:
+  pretrain_network_g: ~
+  # pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+  root: '/131_data/dhryou/multitask'
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-3
+    weight_decay: !!float 1e-3
+    betas: [0.9, 0.9]
+
+  optim_g2:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.9]
+
+  scheduler:
+    type: TrueCosineAnnealingLR
+    T_max: 400000
+    eta_min: !!float 1e-7
+
+  total_iter: 400000
+  warmup_iter: -1 # no warm ups
+
+  # losses
+  pixel_opt:
+    type: PSNRLoss
+    loss_weight: 1
+    reduction: mean
+
+  synthetic: false
+  synthetic_type: gaussian
+  adv: false
+  alpha: 0.7
+  filter: false
+  filter_rate : 0.3
+  fq_aug : false
+  fbr_param : 0.5
+  fbr_mode : linear
+  feature : false
+
+  perturb:
+    alpha: 16
+    iter: 1
+
+# validation settings
+val:
+  val_freq: 5000
+  save_img: false
+  use_image: false
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 500
+  save_checkpoint_freq: 10000
+  use_tb_logger: true
+  wandb:
+    # project: test-project
+    project: NAFNet-multitask
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
