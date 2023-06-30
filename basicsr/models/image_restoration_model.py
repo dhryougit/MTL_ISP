@@ -260,11 +260,11 @@ class ImageRestorationModel(BaseModel):
     def feed_data(self, data_sidd, data_gopro, is_val=False):
         lq_sidd = data_sidd['lq'].to(self.device)
         lq_gopro = data_gopro['lq'].to(self.device)
-        self.lq = torch.concat([lq_sidd, lq_gopro], dim=0)
+        self.lq = torch.cat([lq_sidd, lq_gopro], dim=0)
         if 'gt' in data_sidd:
             gt_sidd = data_sidd['lq'].to(self.device)
             gt_gopro = data_gopro['lq'].to(self.device)
-            self.gt = torch.concat([gt_sidd, gt_gopro], dim=0)
+            self.gt = torch.cat([gt_sidd, gt_gopro], dim=0)
 
     def feed_data_val(self, data, is_val=False):
         self.lq = data['lq'].to(self.device)

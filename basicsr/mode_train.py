@@ -331,6 +331,9 @@ def main():
             # radius = a.data.item()
             msg_logger(log_vars, radius)
 
+    train_sampler_gopro.set_epoch(epoch)
+    prefetcher_gopro.reset()
+    train_data_gopro = prefetcher_gopro.next()
 
     while current_iter <= total_iters:
         train_sampler_sidd.set_epoch(epoch)
