@@ -1,0 +1,182 @@
+# general settings
+name: Restormer
+model_type: ImageRestorationModel
+scale: 1
+num_gpu: 4  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+
+# dataset and data loader settings
+datasets:
+  train_gopro:
+    name: gopro-train
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/GoPro/train/sharp_crops.lmdb
+    dataroot_lq: /131_data/datasets/GoPro/train/blur_crops.lmdb
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: lmdb
+
+    gt_size: 256
+    use_flip: false
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  train_sidd:
+    name: SIDD
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/sidd/train/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/train/input_crops.lmdb
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: lmdb
+
+    gt_size: 256
+    use_flip: false
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+    # ### -------------Progressive training--------------------------
+    # mini_batch_sizes: [8,5,4,2,1,1]             # Batch size per gpu   
+    # iters: [92000,64000,48000,36000,36000,24000]
+    # gt_size: 384   # Max patch size for progressive training
+    # gt_sizes: [128,160,192,256,320,384]  # Patch sizes for progressive training.
+    # ### ------------------------------------------------------------
+
+    ### ------- Training on single fixed-patch size 128x128---------
+    # mini_batch_sizes: [2]   
+    # iters: [50000]
+    # gt_size: 128   
+    # gt_sizes: [128]
+    ### ------------------------------------------------------------
+
+    # dataset_enlarge_ratio: 1
+    # prefetch_mode: ~
+
+  val:
+    name: SIDD_val
+    type: PairedImageDataset
+    dataroot_gt: /131_data/datasets/sidd/SIDD/val/gt_crops.lmdb
+    dataroot_lq: /131_data/datasets/sidd/SIDD/val/input_crops.lmdb
+    io_backend:
+      type: lmdb
+
+# noise:
+#   mode: B  # S: fixed, B: blind
+#   min_noise: 5
+#   max_noise: 25
+#   std: 55
+
+# network structures
+network_g:
+  type: Restormer
+  inp_channels: 3
+  out_channels: 3
+  # dim: 48
+  dim: 12
+  # num_blocks: [4,6,6,8]
+  num_blocks: [1,2,2,3]
+  # num_refinement_blocks: 4
+  num_refinement_blocks: 2
+  heads: [1,2,4,8]
+  ffn_expansion_factor: 2.66
+  bias: False
+  LayerNorm_type: BiasFree
+  dual_pixel_task: False
+
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+  root: '/131_data/dhryou/multitask'
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-3
+    weight_decay: !!float 1e-3
+    betas: [0.9, 0.9]
+
+  optim_g2:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.9]
+
+  scheduler:
+    type: TrueCosineAnnealingLR
+    T_max: 400000
+    eta_min: !!float 1e-7
+
+  total_iter: 400000
+  warmup_iter: -1 # no warm ups
+
+  # losses
+  pixel_opt:
+    type: PSNRLoss
+    loss_weight: 1
+    reduction: mean
+
+  synthetic: false
+  synthetic_type: gaussian
+  adv: false
+  alpha: 0.7
+  filter: false
+  filter_rate : 0.3
+  fq_aug : false
+  fbr_param : 0.5
+  fbr_mode : linear
+  feature : false
+
+  perturb:
+    alpha: 16
+    iter: 1
+
+# validation settings
+val:
+  val_freq: 5000
+  save_img: false
+  use_image: false
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 500
+  save_checkpoint_freq: 10000
+  use_tb_logger: true
+  wandb:
+    # project: test-project
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
+#attack: True
