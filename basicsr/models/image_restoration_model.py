@@ -257,16 +257,16 @@ class ImageRestorationModel(BaseModel):
         self.optimizers.append(self.optimizer_g)
         self.optimizers.append(self.optimizer_g_filter)
 
-    def feed_data(self, data_sidd, data_gopro, is_val=False):
-        lq_sidd = data_sidd['lq'].to(self.device)
-        lq_gopro = data_gopro['lq'].to(self.device)
-        self.lq = torch.cat([lq_sidd, lq_gopro], dim=0)
+    def feed_data_mul(self, data_sidd, data_gopro, is_val=False):
+        self.lq_sidd = data_sidd['lq'].to(self.device)
+        self.lq_gopro = data_gopro['lq'].to(self.device)
+        self.lq = torch.cat([self.lq_sidd, self.lq_gopro], dim=0)
         if 'gt' in data_sidd:
-            gt_sidd = data_sidd['lq'].to(self.device)
-            gt_gopro = data_gopro['lq'].to(self.device)
-            self.gt = torch.cat([gt_sidd, gt_gopro], dim=0)
+            self.gt_sidd = data_sidd['gt'].to(self.device)
+            self.gt_gopro = data_gopro['gt'].to(self.device)
+            self.gt = torch.cat([self.gt_sidd, self.gt_gopro], dim=0)
 
-    def feed_data_val(self, data, is_val=False):
+    def feed_data_one(self, data, is_val=False):
         self.lq = data['lq'].to(self.device)
         if 'gt' in data:
             self.gt = data['gt'].to(self.device)
@@ -506,11 +506,13 @@ class ImageRestorationModel(BaseModel):
             self.mixup_aug()
 
         loss_dict = OrderedDict()
-        preds = self.net_g(self.lq)
+        preds_sidd = self.net_g(self.lq_sidd, 'noise')
+        preds_gopro = self.net_g(self.lq_gopro, 'blur')
 
     
         l_pix = 0.
-        l_pix += self.cri_pix(preds, self.gt)
+        l_pix += self.cri_pix(preds_sidd, self.gt_sidd)
+        l_pix += self.cri_pix(preds_gopro, self.gt_gopro)
         loss_dict['l_lq'] = l_pix
 
 
@@ -679,7 +681,10 @@ class ImageRestorationModel(BaseModel):
                 j = i + m
                 if j >= n:
                     j = n
-                pred = self.net_g(self.lq[i:j])
+                if self.test_mode == Sidd:
+                    pred = self.net_g(self.lq[i:j], 'noise')
+                else :
+                    pred = self.net_g(self.lq[i:j], 'blur')
                 if isinstance(pred, list):
                     pred = pred[-1]
                 outs.append(pred.detach().cpu())
@@ -709,7 +714,7 @@ class ImageRestorationModel(BaseModel):
 
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
 
-            self.feed_data_val(val_data, is_val=True)
+            self.feed_data_one(val_data, is_val=True)
             if self.opt['val'].get('grids', False):
                 self.grids()
 
